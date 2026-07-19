@@ -14,14 +14,15 @@ const devHost = getWslIp();
 
 module.exports = {
   // Where the shell script's injected <script src> loads the bundled payload from.
-  // Cloud Run service (grass-touchers, project grass-touchers-b9882344, us-west1) —
-  // serves both the static payload and the API from the same host. No trailing slash.
-  prodBaseUrl: 'https://grass-touchers-543290570164.us-west1.run.app',
+  // Custom domain, mapped via Cloud Run domain-mappings to the grass-touchers
+  // service (project grass-touchers-b9882344, us-west1) — serves both the
+  // static payload and the API from the same host. No trailing slash.
+  prodBaseUrl: 'https://magiceye.grasstouchers.gg',
   devBaseUrl: `http://${devHost}:8000`,
 
   // Where the payload POSTs report data. Separate from the URLs above because in dev
   // the payload is served statically (esbuild --serve on :8000) while the API server
-  // (npm run server) listens on a different port. In prod both are the same Cloud Run host.
-  prodApiBase: 'https://grass-touchers-543290570164.us-west1.run.app',
+  // (npm run server) listens on a different port. In prod both are the same host.
+  prodApiBase: 'https://magiceye.grasstouchers.gg',
   devApiBase: `http://${devHost}:8080`,
 };

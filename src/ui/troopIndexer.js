@@ -151,6 +151,25 @@ export function incrementIndexCount() {
 
 const DEFAULT_POSITION = ['top:2px', 'right:2px'];
 
+// City switches (and reopening the Agora window) wipe and recreate the
+// button via watchAndInject below, mid-request or not. Tracking the disabled
+// state here (rather than only styling whatever node happened to be clicked)
+// means a freshly recreated button picks up the correct look immediately,
+// instead of momentarily rendering as enabled again while a request from the
+// previous city is still in flight.
+let indexButtonDisabled = false;
+
+function applyDisabledStyle(btn) {
+  btn.style.opacity = indexButtonDisabled ? '0.5' : '';
+  btn.style.cursor = indexButtonDisabled ? 'not-allowed' : 'pointer';
+}
+
+export function setIndexButtonDisabled(disabled) {
+  indexButtonDisabled = disabled;
+  const btn = document.getElementById(DEFENSE_BUTTON_ID);
+  if (btn) applyDisabledStyle(btn);
+}
+
 function buildButton(id, onClick, positionStyle = DEFAULT_POSITION) {
   const btn = document.createElement('div');
   btn.id = id;
@@ -176,6 +195,7 @@ function buildButton(id, onClick, positionStyle = DEFAULT_POSITION) {
 
   btn.addEventListener('click', onClick);
   btn.appendChild(buildBadge(id));
+  applyDisabledStyle(btn);
   return btn;
 }
 

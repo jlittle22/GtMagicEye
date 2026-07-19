@@ -9,6 +9,7 @@ import {
   readCurrentCityName,
   readCityDefenseBreakdown,
   incrementIndexCount,
+  setIndexButtonDisabled,
 } from './ui/troopIndexer.js';
 
 const logger = new Logger('main');
@@ -46,7 +47,7 @@ export async function sendReports(reports) {
     } catch (err) {
       hideLoginLink();
       logger.error('login failed or timed out', err);
-      return;
+      return false;
     }
 
     hideLoginLink();
@@ -57,10 +58,11 @@ export async function sendReports(reports) {
 
   if (!res.ok) {
     logger.error('failed to send reports', res.status);
-    return;
+    return false;
   }
 
   logger.log(`sent ${reports.length} report(s)`);
+  return true;
 }
 
 function indexCurrentCity() {
@@ -95,9 +97,7 @@ function indexCurrentCity() {
     logger.warn('Agora Defense tab is not open, sending merged totals instead');
   }
 
-  incrementIndexCount();
-
-  sendReports([
+  return sendReports([
     {
       cityId: cityId || 0,
       ...(cityName ? { cityName } : {}),
@@ -107,10 +107,55 @@ function indexCurrentCity() {
       ...(supportDetails && supportDetails.length ? { supportDetails } : {}),
       observedAt: new Date().toISOString(),
     },
-  ]).catch((err) => logger.error('sendReports failed', err));
+  ])
+    .then((success) => {
+      if (success) incrementIndexCount();
+    })
+    .catch((err) => logger.error('sendReports failed', err));
 }
 
-watchDefenseHeader(indexCurrentCity);
+// Clicking while a request is already in flight doesn't fire a second one —
+// the button is disabled (visually, though clicks still register so they can
+// be tallied) until the in-flight window ends. That window is at least
+// MIN_GUARD_DURATION_MS even if the request resolves faster, so a rapid
+// double-click can't sneak a second request in right as the first finishes.
+// Hitting the click threshold within that window means the user is
+// spam-clicking rather than triggering occasional re-indexes.
+//
+// Disabled state is toggled via setIndexButtonDisabled (troopIndexer.js)
+// rather than styling event.currentTarget directly: a city switch can wipe
+// and recreate the button mid-request, and that module tracks the disabled
+// flag independently so the newly created node still shows as disabled.
+const SPAM_CLICK_THRESHOLD = 4;
+const MIN_GUARD_DURATION_MS = 1000;
+
+function withSpamGuard(fn, threshold = SPAM_CLICK_THRESHOLD, minDurationMs = MIN_GUARD_DURATION_MS) {
+  let inFlight = false;
+  let clicksWhileInFlight = 0;
+
+  return (...args) => {
+    if (inFlight) {
+      clicksWhileInFlight += 1;
+      if (clicksWhileInFlight >= threshold) {
+        logger.log('special thing');
+      }
+      return;
+    }
+
+    inFlight = true;
+    clicksWhileInFlight = 0;
+    setIndexButtonDisabled(true);
+
+    const minDuration = new Promise((resolve) => setTimeout(resolve, minDurationMs));
+
+    Promise.all([Promise.resolve(fn(...args)), minDuration]).finally(() => {
+      inFlight = false;
+      setIndexButtonDisabled(false);
+    });
+  };
+}
+
+watchDefenseHeader(withSpamGuard(indexCurrentCity));
 
 injectSettingsButton();
 

@@ -46,7 +46,7 @@ function buildPanel() {
   }
 
   const title = document.createElement("div");
-  title.textContent = "Grass Touchers Settings";
+  title.textContent = "GT Magic Eye settings";
   title.style.cssText = "font-weight:600;margin-bottom:10px;";
   panel.appendChild(title);
 
@@ -98,7 +98,7 @@ export function injectSettingsButton() {
 
   const btn = document.createElement("div");
   btn.id = BUTTON_ID;
-  btn.title = "Grass Touchers Settings";
+  btn.title = "GT Magic Eye settings";
   btn.style.cssText = [
     "position:fixed",
     "bottom:16px",
