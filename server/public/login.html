@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grass Touchers Login</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  html { background: #121313; }
+  body {
+    font: 14px sans-serif;
+    max-width: 320px;
+    margin: 60px auto;
+    text-align: center;
+    background: #121313;
+    color: #eee;
+    border: 2px dashed #8bc948;
+    border-radius: 16px;
+    padding: 24px 20px;
+    box-sizing: border-box;
+  }
+  img { width: 240px; height: auto; margin-bottom: 16px; }
+  input {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 8px;
+    box-sizing: border-box;
+    background: #1f2020;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 4px;
+  }
+  button {
+    padding: 8px 16px;
+    background: #8bc948;
+    color: #14210a;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #error { color: #c0392b; min-height: 1.2em; margin-top: 8px; }
+</style>
+</head>
+<body>
+<img src="/logo.png" alt="Grass Touchers">
+<form id="login-form">
+  <input id="username" type="text" placeholder="Username" autocomplete="username" required>
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+  <button type="submit">Log in</button>
+</form>
+<div id="error"></div>
+
+<script>
+  var params = new URLSearchParams(location.search);
+  var sessionId = params.get('session');
+
+  var form = document.getElementById('login-form');
+  var errorEl = document.getElementById('error');
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    errorEl.textContent = '';
+
+    var username = document.getElementById('username').value;
+    var password = document.getElementById('password').value;
+
+    fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password }),
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          return res.json().catch(function () { return {}; }).then(function (body) {
+            throw new Error(body.error || 'Login failed');
+          });
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var finish = function () {
+          errorEl.style.color = '#8bc948';
+          errorEl.textContent = 'Logged in. You can close this tab.';
+          window.close();
+        };
+
+        if (!sessionId) return finish();
+
+        fetch('/api/auth/session/' + encodeURIComponent(sessionId), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: data.token }),
+        }).then(finish).catch(finish);
+      })
+      .catch(function (err) {
+        errorEl.textContent = err.message || 'Login failed';
+      });
+  });
+</script>
+</body>
+</html>

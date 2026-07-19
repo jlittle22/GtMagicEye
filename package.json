@@ -1,0 +1,31 @@
+{
+  "name": "grass-touchers-userscript",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Grepolis Tampermonkey userscript",
+  "scripts": {
+    "build": "node build.cjs && node build-shell.cjs",
+    "watch": "node build.cjs --watch",
+    "dev": "node build.cjs --serve",
+    "build:shell": "node build-shell.cjs",
+    "server": "node server/index.js",
+    "create-user": "node scripts/createUser.js",
+    "start": "node server/index.js",
+    "gcp-build": "node build.cjs && node build-shell.cjs",
+    "deploy": "gcloud run deploy grass-touchers --source . --project=grass-touchers-b9882344 --region=us-west1 --allow-unauthenticated --set-env-vars=MONGODB_DB=grass_touchers --set-secrets=MONGODB_URI=MONGODB_URI:latest,JWT_SECRET=JWT_SECRET:latest"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.6.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.8.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.1"
+  }
+}
