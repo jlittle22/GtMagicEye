@@ -105,7 +105,7 @@ function indexCurrentCity() {
       troops,
       ...(supportTroops ? { supportTroops } : {}),
       ...(supportDetails && supportDetails.length ? { supportDetails } : {}),
-      observedAt: new Date().toISOString(),
+      observedAt: new Date(),
     },
   ])
     .then((success) => {

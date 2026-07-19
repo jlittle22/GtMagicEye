@@ -7,4 +7,8 @@ export const UserDocument = z.object({
   passwordHash: z.string(),
   createdAt: z.date(),
   approvedAt: z.date().nullable().default(null),
+  lastLoggedInAt: z.date().nullable().default(null),
+  lastReportedAt: z.date().nullable().default(null),
+  // Set manually (no admin route for this yet) to ban an account.
+  bannedSince: z.date().nullable().default(null),
 });

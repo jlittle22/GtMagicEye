@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
+import { ObjectId } from "mongodb";
 import { ReportPayload } from "../shared/payload.js";
 import { connectDb, getDb } from "./db.js";
 import { loginUser } from "./auth.js";
@@ -93,6 +94,16 @@ app.post("/api/reports", requireAuth, reportsLimiter, async (req, res) => {
   } catch (err) {
     console.error("[server] failed to persist reports", err);
     return res.status(500).json({ error: "failed to persist reports" });
+  }
+
+  // Best-effort — the reports themselves are already persisted, so a hiccup
+  // here shouldn't fail the request or block the response.
+  try {
+    await getDb()
+      .collection("users")
+      .updateOne({ _id: new ObjectId(req.user._id) }, { $set: { lastReportedAt: insertedAt } });
+  } catch (err) {
+    console.error("[server] failed to update lastReportedAt", err);
   }
 
   console.log(`[server] persisted ${docs.length} report(s) from ${req.user.username}`);

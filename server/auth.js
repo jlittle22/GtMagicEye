@@ -30,6 +30,17 @@ export async function loginUser(username, password) {
     throw err;
   }
 
+  // Checked after the password compare (not before) so a wrong-password
+  // attempt on a banned username still just gets "invalid credentials",
+  // not a signal that the account exists and is banned.
+  if (user.bannedSince) {
+    const err = new Error('account banned');
+    err.status = 403;
+    throw err;
+  }
+
+  await users.updateOne({ _id: user._id }, { $set: { lastLoggedInAt: new Date() } });
+
   // Explicit allowlist (not a spread-minus-passwordHash): keeps any future
   // sensitive field off the JWT by default, and covers documents created
   // before a field like `approvedAt` existed, which won't have it stored at

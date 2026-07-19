@@ -23,7 +23,7 @@ export const CityReport = z.object({
   // Only present when splitNativeSupport is on and the scrape succeeded.
   supportTroops: z.record(z.string(), z.number().int().nonnegative()).optional(),
   supportDetails: z.array(SupportDetail).optional(),
-  observedAt: z.string().datetime(),
+  observedAt: z.coerce.date(),
 });
 
 export const ReportPayload = z.object({
