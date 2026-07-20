@@ -117,14 +117,13 @@ const BADGE_RED = '#c0392b';
 // Session-scoped only (resets on page reload) — not persisted anywhere.
 let indexCount = 0;
 
-function badgeColor() {
-  return indexCount > 0 ? SECONDARY_COLOR : BADGE_RED;
-}
-
 function badgeId(buttonId) {
   return `${buttonId}-badge`;
 }
 
+// Hidden at 0 (nothing indexed yet this session), then visible for the rest
+// of the session once it ticks up at least once. Stays red throughout —
+// no green "success" state, red is just the "you've indexed N" indicator.
 function buildBadge(buttonId) {
   const badge = document.createElement('div');
   badge.id = badgeId(buttonId);
@@ -136,13 +135,13 @@ function buildBadge(buttonId) {
     'width:12px',
     'height:12px',
     'border-radius:50%',
-    `background:${badgeColor()}`,
+    `background:${BADGE_RED}`,
     'color:#fff',
     'font:bold 7px sans-serif',
-    'display:flex',
     'align-items:center',
     'justify-content:center',
     'box-shadow:0 1px 3px rgba(0,0,0,0.5)',
+    `display:${indexCount > 0 ? 'flex' : 'none'}`,
   ].join(';');
   return badge;
 }
@@ -154,7 +153,7 @@ export function incrementIndexCount() {
   const el = document.getElementById(badgeId(DEFENSE_BUTTON_ID));
   if (el) {
     el.textContent = String(indexCount);
-    el.style.background = badgeColor();
+    el.style.display = 'flex';
   }
 }
 
