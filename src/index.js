@@ -8,6 +8,7 @@ import {
   readCurrentCityTroops,
   readCurrentCityName,
   readCityDefenseBreakdown,
+  readWorldId,
   incrementIndexCount,
   setIndexButtonDisabled,
 } from './ui/troopIndexer.js';
@@ -72,6 +73,12 @@ function indexCurrentCity() {
     return;
   }
 
+  const worldId = readWorldId();
+  if (!worldId) {
+    logger.warn('could not parse world id from hostname, nothing to index');
+    return;
+  }
+
   const cityId = window.Game && window.Game.townId;
   if (!cityId) {
     logger.warn('Game.townId not available, cityId will be wrong');
@@ -100,6 +107,7 @@ function indexCurrentCity() {
   return sendReports([
     {
       cityId: cityId || 0,
+      worldId,
       ...(cityName ? { cityName } : {}),
       ...(typeof allianceId === 'number' ? { allianceId } : {}),
       troops,

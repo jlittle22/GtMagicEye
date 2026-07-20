@@ -14,6 +14,8 @@ export const SupportDetail = z.object({
 export const CityReport = z.object({
   cityId: z.number().int(),
   cityName: z.string().optional(),
+  // e.g. "us145", parsed from the game hostname (<world>.grepolis.com).
+  worldId: z.string(),
   playerId: z.number().int().optional(),
   allianceId: z.number().int().optional(),
   x: z.number().int().optional(),

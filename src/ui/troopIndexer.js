@@ -21,6 +21,15 @@ export function readCurrentCityTroops() {
   return troops;
 }
 
+// e.g. "us145.grepolis.com" -> "us145". Grepolis puts the world on the
+// subdomain, so this is derivable anywhere the script runs in-game.
+const WORLD_ID_PATTERN = /^([a-z0-9]+)\.grepolis\.com$/i;
+
+export function readWorldId() {
+  const match = window.location.hostname.match(WORLD_ID_PATTERN);
+  return match ? match[1] : null;
+}
+
 const TOWN_NAME_SELECTOR = '.town_name_area .town_name';
 
 // Part of the persistent top toolbar (with the prev/next-town arrows), unlike
