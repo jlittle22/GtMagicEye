@@ -5,6 +5,7 @@ import express from "express";
 import cors from "cors";
 import { ObjectId } from "mongodb";
 import { ReportPayload } from "../shared/payload.js";
+import { reportContentSignature } from "../shared/reportDedup.js";
 import { connectDb, getDb } from "./db.js";
 import { loginUser } from "./auth.js";
 import { requireAuth } from "./middleware/requireAuth.js";
@@ -66,6 +67,13 @@ app.get("/api/auth/session/:sessionId", (req, res) => {
   res.status(200).json({ token });
 });
 
+// Same city, same troop/support content, reported again within this
+// window — treated as a duplicate and not written again. Grepolis towns
+// can only be indexed by their own owner (nobody else sees their Defense
+// tab), so this only ever guards against the same user re-submitting
+// unchanged data, not a cross-user race.
+const REPORT_DEDUPE_WINDOW_MS = 60 * 1000;
+
 app.post("/api/reports", requireAuth, reportsLimiter, async (req, res) => {
   const result = ReportPayload.safeParse(req.body);
   if (!result.success) {
@@ -89,15 +97,41 @@ app.post("/api/reports", requireAuth, reportsLimiter, async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
+  const cutoff = new Date(insertedAt.getTime() - REPORT_DEDUPE_WINDOW_MS);
+  let docsToInsert;
   try {
-    await getDb().collection("reports").insertMany(docs);
+    docsToInsert = [];
+    for (const doc of docs) {
+      const recent = await getDb()
+        .collection("reports")
+        .find(
+          { cityId: doc.cityId, worldId: doc.worldId, insertedAt: { $gte: cutoff } },
+          { projection: { troops: 1, supportTroops: 1, supportDetails: 1 } }
+        )
+        .toArray();
+
+      const signature = reportContentSignature(doc);
+      const isDuplicate = recent.some((existing) => reportContentSignature(existing) === signature);
+      if (!isDuplicate) docsToInsert.push(doc);
+    }
   } catch (err) {
-    console.error("[server] failed to persist reports", err);
-    return res.status(500).json({ error: "failed to persist reports" });
+    console.error("[server] failed to check for duplicate reports", err);
+    return res.status(500).json({ error: "failed to check for duplicate reports" });
+  }
+
+  if (docsToInsert.length > 0) {
+    try {
+      await getDb().collection("reports").insertMany(docsToInsert);
+    } catch (err) {
+      console.error("[server] failed to persist reports", err);
+      return res.status(500).json({ error: "failed to persist reports" });
+    }
   }
 
   // Best-effort — the reports themselves are already persisted, so a hiccup
-  // here shouldn't fail the request or block the response.
+  // here shouldn't fail the request or block the response. Runs even for an
+  // all-duplicates request: the user did still confirm the city, even if
+  // nothing new was written.
   try {
     await getDb()
       .collection("users")
@@ -106,7 +140,11 @@ app.post("/api/reports", requireAuth, reportsLimiter, async (req, res) => {
     console.error("[server] failed to update lastReportedAt", err);
   }
 
-  console.log(`[server] persisted ${docs.length} report(s) from ${req.user.username}`);
+  const skipped = docs.length - docsToInsert.length;
+  console.log(
+    `[server] persisted ${docsToInsert.length}/${docs.length} report(s) from ${req.user.username}` +
+      (skipped > 0 ? ` (${skipped} duplicate, skipped)` : "")
+  );
 
   res.status(204).end();
 });

@@ -1,5 +1,6 @@
 import { Logger } from "./logger.js";
 import { ReportPayload } from "../shared/payload.js";
+import { reportContentSignature } from "../shared/reportDedup.js";
 import {
   getStoredToken,
   setStoredToken,
@@ -20,7 +21,6 @@ import {
   readCityDefenseBreakdown,
   readWorldId,
   incrementIndexCount,
-  setIndexButtonDisabled,
   flashIndexButtonSuccess,
   injectTownIndicator,
   watchTownName,
@@ -184,6 +184,36 @@ function registerCityStaleness(cityId, worldId, isStale) {
   setStaleIndicatorState(cityStaleness.size, staleCityCount);
 }
 
+// Updates everything that should reflect "this city's data is current as
+// of right now" — used both after a real submit and after a client-side
+// deduped skip, since in both cases the city genuinely is up to date.
+function markCityFresh(cityId, worldId) {
+  const now = new Date();
+  const isStale = setTownIndicatorState(now);
+  cacheLastReportTime(cityId, worldId, now);
+  registerCityStaleness(cityId, worldId, isStale);
+}
+
+// Same-session, client-side half of dedup: if the troop/support content is
+// unchanged since the last thing actually submitted for this city, skip
+// the network call entirely rather than round-tripping just to have the
+// server (which does its own signature check) discard it. Reuses the same
+// TTL as lastReportCache — the window doesn't need to be its own knob.
+const lastSubmittedSignature = new Map(); // `${worldId}:${cityId}` -> { signature, expiresAt }
+
+function isDuplicateSubmission(cityId, worldId, troops, supportTroops, supportDetails) {
+  const cached = lastSubmittedSignature.get(lastReportCacheKey(cityId, worldId));
+  if (!cached || cached.expiresAt <= Date.now()) return false;
+  return cached.signature === reportContentSignature({ troops, supportTroops, supportDetails });
+}
+
+function rememberSubmission(cityId, worldId, troops, supportTroops, supportDetails) {
+  lastSubmittedSignature.set(lastReportCacheKey(cityId, worldId), {
+    signature: reportContentSignature({ troops, supportTroops, supportDetails }),
+    expiresAt: Date.now() + LAST_REPORT_CACHE_TTL_MS,
+  });
+}
+
 function indexCurrentCity() {
   let troops = readCurrentCityTroops();
   if (!troops) {
@@ -224,6 +254,13 @@ function indexCurrentCity() {
     logger.warn("Agora Defense tab is not open, sending merged totals instead");
   }
 
+  if (isDuplicateSubmission(cityId, worldId, troops, supportTroops, supportDetails)) {
+    logger.log("duplicate report content, skipping submission");
+    flashIndexButtonSuccess();
+    markCityFresh(cityId, worldId);
+    return;
+  }
+
   return sendReports([
     {
       cityId: cityId || 0,
@@ -240,27 +277,22 @@ function indexCurrentCity() {
       if (success) {
         incrementIndexCount();
         flashIndexButtonSuccess();
-        // Known-fresh already — no need to round-trip through
-        // fetchLastReportTime just to learn what we already know.
-        const now = new Date();
-        const isStale = setTownIndicatorState(now);
-        cacheLastReportTime(cityId, worldId, now);
-        registerCityStaleness(cityId, worldId, isStale);
+        markCityFresh(cityId, worldId);
+        rememberSubmission(cityId, worldId, troops, supportTroops, supportDetails);
       }
     })
     .catch((err) => logger.error("sendReports failed", err));
 }
 
-// Clicking while a request is already in flight doesn't fire a second one —
-// the button is disabled (visually, though clicks still register so they can
-// be tallied) until the in-flight request actually resolves. Hitting the
-// click threshold within that window means the user is spam-clicking rather
-// than triggering occasional re-indexes.
-//
-// Disabled state is toggled via setIndexButtonDisabled (troopIndexer.js)
-// rather than styling event.currentTarget directly: a city switch can wipe
-// and recreate the button mid-request, and that module tracks the disabled
-// flag independently so the newly created node still shows as disabled.
+// The button stays fully clickable — no disabled/dimmed state — but a
+// click while a request is already in flight doesn't fire a second one;
+// it's just tallied instead (clicksWhileInFlight, currently only feeding
+// the SPAM_CLICK_THRESHOLD log below — this is the hook point for the
+// planned gamification hit on repeated clicks, not built yet). Once the
+// in-flight request resolves, the next click is free to fire a real one
+// again — indexCurrentCity's own client-side dedup check (fast, in-memory)
+// is what keeps that from actually hitting the network on unchanged data,
+// not this guard.
 const SPAM_CLICK_THRESHOLD = 4;
 
 function withSpamGuard(fn, threshold = SPAM_CLICK_THRESHOLD) {
@@ -278,11 +310,9 @@ function withSpamGuard(fn, threshold = SPAM_CLICK_THRESHOLD) {
 
     inFlight = true;
     clicksWhileInFlight = 0;
-    setIndexButtonDisabled(true);
 
     Promise.resolve(fn(...args)).finally(() => {
       inFlight = false;
-      setIndexButtonDisabled(false);
     });
   };
 }
