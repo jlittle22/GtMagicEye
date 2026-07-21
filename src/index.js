@@ -10,7 +10,7 @@ import { showLoginLink, hideLoginLink } from "./ui/loginPrompt.js";
 import {
   injectSettingsButton,
   injectStaleIndicator,
-  setStaleIndicatorCount,
+  setStaleIndicatorState,
 } from "./ui/settingsMenu.js";
 import { FEATURE_FLAGS } from "./featureFlags.js";
 import {
@@ -21,9 +21,11 @@ import {
   readWorldId,
   incrementIndexCount,
   setIndexButtonDisabled,
+  flashIndexButtonSuccess,
   injectTownIndicator,
   watchTownName,
   setTownIndicatorState,
+  watchTownGroupsList,
 } from "./ui/troopIndexer.js";
 
 const logger = new Logger("main");
@@ -179,7 +181,7 @@ function registerCityStaleness(cityId, worldId, isStale) {
     staleCityCount -= 1;
   }
 
-  setStaleIndicatorCount(staleCityCount);
+  setStaleIndicatorState(cityStaleness.size, staleCityCount);
 }
 
 function indexCurrentCity() {
@@ -237,6 +239,7 @@ function indexCurrentCity() {
     .then((success) => {
       if (success) {
         incrementIndexCount();
+        flashIndexButtonSuccess();
         // Known-fresh already — no need to round-trip through
         // fetchLastReportTime just to learn what we already know.
         const now = new Date();
@@ -250,24 +253,17 @@ function indexCurrentCity() {
 
 // Clicking while a request is already in flight doesn't fire a second one —
 // the button is disabled (visually, though clicks still register so they can
-// be tallied) until the in-flight window ends. That window is at least
-// MIN_GUARD_DURATION_MS even if the request resolves faster, so a rapid
-// double-click can't sneak a second request in right as the first finishes.
-// Hitting the click threshold within that window means the user is
-// spam-clicking rather than triggering occasional re-indexes.
+// be tallied) until the in-flight request actually resolves. Hitting the
+// click threshold within that window means the user is spam-clicking rather
+// than triggering occasional re-indexes.
 //
 // Disabled state is toggled via setIndexButtonDisabled (troopIndexer.js)
 // rather than styling event.currentTarget directly: a city switch can wipe
 // and recreate the button mid-request, and that module tracks the disabled
 // flag independently so the newly created node still shows as disabled.
 const SPAM_CLICK_THRESHOLD = 4;
-const MIN_GUARD_DURATION_MS = 1000;
 
-function withSpamGuard(
-  fn,
-  threshold = SPAM_CLICK_THRESHOLD,
-  minDurationMs = MIN_GUARD_DURATION_MS,
-) {
+function withSpamGuard(fn, threshold = SPAM_CLICK_THRESHOLD) {
   let inFlight = false;
   let clicksWhileInFlight = 0;
 
@@ -284,11 +280,7 @@ function withSpamGuard(
     clicksWhileInFlight = 0;
     setIndexButtonDisabled(true);
 
-    const minDuration = new Promise((resolve) =>
-      setTimeout(resolve, minDurationMs),
-    );
-
-    Promise.all([Promise.resolve(fn(...args)), minDuration]).finally(() => {
+    Promise.resolve(fn(...args)).finally(() => {
       inFlight = false;
       setIndexButtonDisabled(false);
     });
@@ -325,10 +317,20 @@ function refreshTownIndicator() {
     .catch((err) => logger.error("checkCityStaleness failed", err));
 }
 
+// Only reads already-known staleness (cityStaleness), doesn't check
+// anything new — a city not yet visited/checked this session just gets no
+// dot, same as its town indicator would show nothing until checked.
+function isCityKnownStale(cityId) {
+  const worldId = readWorldId();
+  if (!worldId) return false;
+  return cityStaleness.get(lastReportCacheKey(cityId, worldId)) === true;
+}
+
 if (FEATURE_FLAGS.checkCityStaleness) {
   injectStaleIndicator();
   refreshTownIndicator();
   watchTownName(refreshTownIndicator);
+  watchTownGroupsList(isCityKnownStale);
 }
 
 logger.log("loaded");

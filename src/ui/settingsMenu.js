@@ -1,4 +1,4 @@
-import { PRIMARY_COLOR, SECONDARY_COLOR } from "./theme.js";
+import { PRIMARY_COLOR, SECONDARY_COLOR, WARNING_YELLOW, WARNING_RED } from "./theme.js";
 import logoIcon from "../../assets/logo-icon.png";
 import { FEATURE_FLAGS, setFeatureFlag } from "../featureFlags.js";
 
@@ -147,7 +147,7 @@ export function injectStaleIndicator() {
     "padding:0 12px",
     "border-radius:18px",
     `background:${PRIMARY_COLOR}`,
-    `border:1px solid ${SECONDARY_COLOR}`,
+    "border:1px solid", // color set by setStaleIndicatorState below
     "color:#fff",
     "font:12px sans-serif",
     "white-space:nowrap",
@@ -155,15 +155,26 @@ export function injectStaleIndicator() {
   ].join(";");
 
   document.body.appendChild(el);
-  setStaleIndicatorCount(0);
+  setStaleIndicatorState(0, 0);
 }
 
-export function setStaleIndicatorCount(count) {
+// Three states: nothing checked yet this session (yellow, prompts the user
+// to go look at cities), everything checked so far is fresh (green), or at
+// least one checked city is stale (red) — checkedCount is what tells "no
+// data yet" apart from "checked and all clear", since both would otherwise
+// look like staleCount === 0.
+export function setStaleIndicatorState(checkedCount, staleCount) {
   const el = document.getElementById(STALE_INDICATOR_ID);
   if (!el) return;
 
-  el.textContent =
-    count > 0
-      ? `Detected ${count} stale ${count === 1 ? "city" : "cities"}`
-      : "Up to date. Thanks!";
+  if (checkedCount === 0) {
+    el.style.borderColor = WARNING_YELLOW;
+    el.textContent = "Click through cities to detect staleness";
+  } else if (staleCount > 0) {
+    el.style.borderColor = WARNING_RED;
+    el.textContent = `Detected ${staleCount} stale ${staleCount === 1 ? "city" : "cities"}`;
+  } else {
+    el.style.borderColor = SECONDARY_COLOR;
+    el.textContent = "Up to date. Thanks!";
+  }
 }

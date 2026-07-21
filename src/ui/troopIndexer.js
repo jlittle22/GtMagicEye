@@ -159,10 +159,22 @@ function buildBadge(buttonId) {
   return badge;
 }
 
+// "Index Troops" before anything's been indexed this session (badge is
+// still hidden at 0); once it has, the tooltip reports the running count
+// instead, matching what the badge itself is showing.
+function indexButtonTitle() {
+  return indexCount > 0
+    ? `Indexed ${indexCount} ${indexCount === 1 ? "report" : "reports"} this session`
+    : "Index Troops";
+}
+
 // Bumps the count and updates the currently-rendered badge in place, since
 // watchAndInject may not re-run before the next click.
 export function incrementIndexCount() {
   indexCount += 1;
+  const btn = document.getElementById(DEFENSE_BUTTON_ID);
+  if (btn) btn.title = indexButtonTitle();
+
   const el = document.getElementById(badgeId(DEFENSE_BUTTON_ID));
   if (el) {
     el.textContent = String(indexCount);
@@ -191,10 +203,12 @@ export function setIndexButtonDisabled(disabled) {
   if (btn) applyDisabledStyle(btn);
 }
 
+const DEFAULT_BUTTON_BOX_SHADOW = "0 1px 4px rgba(0,0,0,0.4)";
+
 function buildButton(id, onClick, positionStyle = DEFAULT_POSITION) {
   const btn = document.createElement("div");
   btn.id = id;
-  btn.title = "Index Troops";
+  btn.title = indexButtonTitle();
   btn.style.cssText = [
     "position:absolute",
     ...positionStyle,
@@ -205,19 +219,41 @@ function buildButton(id, onClick, positionStyle = DEFAULT_POSITION) {
     `background:${PRIMARY_COLOR}`,
     `border:1px solid ${SECONDARY_COLOR}`,
     "border-radius:4px",
-    "box-shadow:0 1px 4px rgba(0,0,0,0.4)",
+    `box-shadow:${DEFAULT_BUTTON_BOX_SHADOW}`,
+    "transition:box-shadow 0.15s ease",
   ].join(";");
 
   const icon = document.createElement("img");
   icon.src = logoIcon;
   icon.alt = "Index Troops";
-  icon.style.cssText = "display:block;width:18px;height:18px;";
+  icon.style.cssText =
+    "display:block;width:18px;height:18px;transition:transform 0.15s ease;";
   btn.appendChild(icon);
 
   btn.addEventListener("click", onClick);
   btn.appendChild(buildBadge(id));
   applyDisabledStyle(btn);
   return btn;
+}
+
+const SUCCESS_FLASH_MS = 400;
+
+// A brief glow + icon pulse on the button itself — right where the user's
+// cursor already is — so a successful index gives instant confirmation
+// without them having to look elsewhere for a toast or check the badge.
+export function flashIndexButtonSuccess() {
+  const btn = document.getElementById(DEFENSE_BUTTON_ID);
+  if (!btn) return;
+
+  const icon = btn.querySelector("img");
+
+  btn.style.boxShadow = `0 0 10px 2px ${SECONDARY_COLOR}`;
+  if (icon) icon.style.transform = "scale(1.3)";
+
+  setTimeout(() => {
+    btn.style.boxShadow = DEFAULT_BUTTON_BOX_SHADOW;
+    if (icon) icon.style.transform = "scale(1)";
+  }, SUCCESS_FLASH_MS);
 }
 
 // #defense_header sits inside a dialog (#place_defense) whose total height
@@ -290,7 +326,8 @@ export function watchDefenseHeader(onClick) {
 const TOWN_INDICATOR_ID = "gt-town-indicator";
 const TOWN_INDICATOR_DOT_ID = `${TOWN_INDICATOR_ID}-dot`;
 // __STALE_AFTER_DAYS__ injected at build time from config.cjs, see build.cjs
-const STALE_THRESHOLD_MS = __STALE_AFTER_DAYS__ * 24 * 60 * 60 * 1000;
+// const STALE_THRESHOLD_MS = __STALE_AFTER_DAYS__ * 24 * 60 * 60 * 1000;
+const STALE_THRESHOLD_MS = 5 * 60000;
 
 // Grepolis's own timestamps in-game are server-time, but there's no single
 // server time here — always New York, regardless of viewer's local zone,
@@ -391,9 +428,10 @@ export function setTownIndicatorState(lastReportedAt) {
     const dot = document.getElementById(TOWN_INDICATOR_DOT_ID);
     if (dot) dot.style.display = isStale ? "block" : "none";
 
-    wrap.title = lastReportedAt
+    const baseTitle = lastReportedAt
       ? `Last indexed: ${formatNewYorkTimestamp(lastReportedAt)} (server time)`
       : "Never indexed";
+    wrap.title = isStale ? `Index needed! ${baseTitle}` : baseTitle;
   }
 
   return isStale;
@@ -414,5 +452,68 @@ export function watchTownName(onChange) {
     subtree: true,
     characterData: true,
   });
+  return observer;
+}
+
+const TOWN_GROUPS_LIST_SELECTOR = "#town_groups_list";
+const TOWN_GROUP_ITEM_SELECTOR = ".town_group_town[data-townid]";
+const STALE_DOT_CLASS = "gt-stale-dot";
+
+function buildStaleDot() {
+  const dot = document.createElement("span");
+  dot.className = STALE_DOT_CLASS;
+  dot.title = "Index needed!";
+  dot.style.cssText = [
+    "display:inline-block",
+    "width:7px",
+    "height:7px",
+    "border-radius:50%",
+    `background:${BADGE_RED}`,
+    "margin-left:4px",
+    "vertical-align:middle",
+    "box-shadow:0 0 0 1px rgba(0,0,0,0.45)",
+  ].join(";");
+  return dot;
+}
+
+// The same city can appear multiple times in this list (once under "All",
+// once per custom group it's also in) — each occurrence is checked and
+// stamped independently. This is watched by a MutationObserver on
+// document.body below, so it must actually diff (only touch the DOM when
+// an item's dot state is wrong) rather than unconditionally clear and
+// redraw every time: adding/removing nodes is itself a mutation, and an
+// unconditional redraw on every call would re-trigger that same observer
+// forever — a self-feeding loop that pegs the page (this is what caused
+// the whole game to hang).
+function stampStaleDots(isStale) {
+  const list = document.querySelector(TOWN_GROUPS_LIST_SELECTOR);
+  if (!list) return;
+
+  list.querySelectorAll(TOWN_GROUP_ITEM_SELECTOR).forEach((item) => {
+    const cityId = parseInt(item.dataset.townid, 10);
+    const nameEl = item.querySelector(".town_name");
+    if (!Number.isFinite(cityId) || !nameEl) return;
+
+    const existingDot = item.querySelector(`.${STALE_DOT_CLASS}`);
+    const shouldShowDot = isStale(cityId);
+
+    if (shouldShowDot && !existingDot) {
+      nameEl.after(buildStaleDot());
+    } else if (!shouldShowDot && existingDot) {
+      existingDot.remove();
+    }
+  });
+}
+
+// isStale(cityId) -> boolean, supplied by the caller since staleness state
+// lives outside this module. The dropdown's DOM is rebuilt/repositioned
+// often (dragging towns between groups, expanding/collapsing groups), same
+// as #defense_header, so this uses the same broad watch-and-restamp
+// approach as watchAndInject rather than a single one-shot check.
+export function watchTownGroupsList(isStale) {
+  const run = () => stampStaleDots(isStale);
+  run();
+  const observer = new MutationObserver(run);
+  observer.observe(document.body, { childList: true, subtree: true });
   return observer;
 }
