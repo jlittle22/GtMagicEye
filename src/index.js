@@ -201,15 +201,36 @@ function markCityFresh(cityId, worldId) {
 // TTL as lastReportCache — the window doesn't need to be its own knob.
 const lastSubmittedSignature = new Map(); // `${worldId}:${cityId}` -> { signature, expiresAt }
 
-function isDuplicateSubmission(cityId, worldId, troops, supportTroops, supportDetails) {
-  const cached = lastSubmittedSignature.get(lastReportCacheKey(cityId, worldId));
+function isDuplicateSubmission(
+  cityId,
+  worldId,
+  troops,
+  supportTroops,
+  supportDetails,
+) {
+  const cached = lastSubmittedSignature.get(
+    lastReportCacheKey(cityId, worldId),
+  );
   if (!cached || cached.expiresAt <= Date.now()) return false;
-  return cached.signature === reportContentSignature({ troops, supportTroops, supportDetails });
+  return (
+    cached.signature ===
+    reportContentSignature({ troops, supportTroops, supportDetails })
+  );
 }
 
-function rememberSubmission(cityId, worldId, troops, supportTroops, supportDetails) {
+function rememberSubmission(
+  cityId,
+  worldId,
+  troops,
+  supportTroops,
+  supportDetails,
+) {
   lastSubmittedSignature.set(lastReportCacheKey(cityId, worldId), {
-    signature: reportContentSignature({ troops, supportTroops, supportDetails }),
+    signature: reportContentSignature({
+      troops,
+      supportTroops,
+      supportDetails,
+    }),
     expiresAt: Date.now() + LAST_REPORT_CACHE_TTL_MS,
   });
 }
@@ -254,8 +275,15 @@ function indexCurrentCity() {
     logger.warn("Agora Defense tab is not open, sending merged totals instead");
   }
 
-  if (isDuplicateSubmission(cityId, worldId, troops, supportTroops, supportDetails)) {
-    logger.log("duplicate report content, skipping submission");
+  if (
+    isDuplicateSubmission(
+      cityId,
+      worldId,
+      troops,
+      supportTroops,
+      supportDetails,
+    )
+  ) {
     flashIndexButtonSuccess();
     markCityFresh(cityId, worldId);
     return;
@@ -278,7 +306,13 @@ function indexCurrentCity() {
         incrementIndexCount();
         flashIndexButtonSuccess();
         markCityFresh(cityId, worldId);
-        rememberSubmission(cityId, worldId, troops, supportTroops, supportDetails);
+        rememberSubmission(
+          cityId,
+          worldId,
+          troops,
+          supportTroops,
+          supportDetails,
+        );
       }
     })
     .catch((err) => logger.error("sendReports failed", err));
