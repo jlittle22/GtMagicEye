@@ -6,6 +6,7 @@
   "description": "Grepolis Tampermonkey userscript",
   "scripts": {
     "build": "node build.cjs && node build-shell.cjs",
+    "build:obfuscated": "node build.cjs --obfuscate && node build-shell.cjs",
     "watch": "node build.cjs --watch",
     "dev": "node build.cjs --serve",
     "build:shell": "node build-shell.cjs",
@@ -26,6 +27,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "esbuild": "^0.23.1"
+    "esbuild": "^0.23.1",
+    "javascript-obfuscator": "^5.5.0"
   }
 }
