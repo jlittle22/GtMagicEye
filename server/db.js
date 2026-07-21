@@ -13,6 +13,9 @@ export async function connectDb() {
   await client.connect();
   db = client.db(process.env.MONGODB_DB || undefined);
   await db.collection('users').createIndex({ username: 1 }, { unique: true });
+  // Matches GET /api/reports/last's query + sort exactly, so that lookup
+  // stays an index scan instead of a full collection scan as reports grow.
+  await db.collection('reports').createIndex({ cityId: 1, worldId: 1, insertedAt: -1 });
   return db;
 }
 

@@ -111,6 +111,29 @@ app.post("/api/reports", requireAuth, reportsLimiter, async (req, res) => {
   res.status(204).end();
 });
 
+// worldId is required alongside cityId since Grepolis town ids aren't
+// globally unique across worlds — cityId alone could match the wrong city
+// on a different server.
+app.get("/api/reports/last", requireAuth, async (req, res) => {
+  const cityId = Number(req.query.cityId);
+  const worldId = req.query.worldId;
+
+  if (!Number.isInteger(cityId) || typeof worldId !== "string" || !worldId) {
+    return res.status(400).json({ error: "cityId and worldId are required" });
+  }
+
+  try {
+    const report = await getDb()
+      .collection("reports")
+      .findOne({ cityId, worldId }, { sort: { insertedAt: -1 }, projection: { insertedAt: 1 } });
+
+    res.status(200).json({ lastReportedAt: report ? report.insertedAt : null });
+  } catch (err) {
+    console.error("[server] failed to look up last report", err);
+    res.status(500).json({ error: "failed to look up last report" });
+  }
+});
+
 const port = process.env.PORT || 8080;
 
 connectDb()

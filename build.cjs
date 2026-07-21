@@ -16,6 +16,7 @@ async function build() {
     loader: { '.png': 'dataurl' },
     define: {
       __API_BASE__: JSON.stringify(apiBase),
+      __STALE_AFTER_DAYS__: JSON.stringify(config.staleAfterDays),
     },
   });
 

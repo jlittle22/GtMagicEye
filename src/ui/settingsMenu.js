@@ -4,9 +4,11 @@ import { FEATURE_FLAGS, setFeatureFlag } from "../featureFlags.js";
 
 const BUTTON_ID = "gt-settings-btn";
 const PANEL_ID = "gt-settings-panel";
+const STALE_INDICATOR_ID = "gt-stale-indicator";
 
 const FLAG_LABELS = {
   message: "Display announcement",
+  checkCityStaleness: "Check city staleness",
 };
 
 // TODO: hardcoded for now — make this configurable later.
@@ -124,4 +126,44 @@ export function injectSettingsButton() {
 
   btn.addEventListener("click", togglePanel);
   document.body.appendChild(btn);
+}
+
+// Sits to the right of the settings button, at the same height — since the
+// panel opens upward from the button (bottom:60px), that spot stays clear
+// whether or not the panel is open.
+export function injectStaleIndicator() {
+  if (document.getElementById(STALE_INDICATOR_ID)) return;
+
+  const el = document.createElement("div");
+  el.id = STALE_INDICATOR_ID;
+  el.style.cssText = [
+    "position:fixed",
+    "bottom:16px",
+    "left:60px",
+    "z-index:100000",
+    "height:36px",
+    "display:flex",
+    "align-items:center",
+    "padding:0 12px",
+    "border-radius:18px",
+    `background:${PRIMARY_COLOR}`,
+    `border:1px solid ${SECONDARY_COLOR}`,
+    "color:#fff",
+    "font:12px sans-serif",
+    "white-space:nowrap",
+    "box-shadow:0 1px 4px rgba(0,0,0,0.4)",
+  ].join(";");
+
+  document.body.appendChild(el);
+  setStaleIndicatorCount(0);
+}
+
+export function setStaleIndicatorCount(count) {
+  const el = document.getElementById(STALE_INDICATOR_ID);
+  if (!el) return;
+
+  el.textContent =
+    count > 0
+      ? `Detected ${count} stale ${count === 1 ? "city" : "cities"}`
+      : "Up to date. Thanks!";
 }

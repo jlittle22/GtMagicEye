@@ -25,4 +25,8 @@ module.exports = {
   // (npm run server) listens on a different port. In prod both are the same host.
   prodApiBase: 'https://magiceye.grasstouchers.gg',
   devApiBase: `http://${devHost}:8080`,
+
+  // Days since a city's last report before the town indicator flags it as
+  // needing re-indexing (the red dot). Same for dev and prod.
+  staleAfterDays: 7,
 };

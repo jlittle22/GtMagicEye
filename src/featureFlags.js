@@ -1,8 +1,13 @@
-const STORAGE_KEY = 'gt_feature_flags';
+const STORAGE_KEY = "gt_feature_flags";
 
 const DEFAULTS = {
   // When true, a hardcoded message shows at the top of the settings panel.
   message: true,
+  // Gates the unattended check (src/index.js) that fetches the last report
+  // time for the current city — on load and on every city switch — to
+  // drive the town indicator's stale dot. Prompts login if needed, since
+  // that fetch is authenticated.
+  checkCityStaleness: true,
 };
 
 function loadOverrides() {
