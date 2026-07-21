@@ -22,6 +22,8 @@ import {
   readWorldId,
   incrementIndexCount,
   flashIndexButtonSuccess,
+  registerSpamClick,
+  resetSpamMeter,
   injectTownIndicator,
   watchTownName,
   setTownIndicatorState,
@@ -284,7 +286,7 @@ function indexCurrentCity() {
       supportDetails,
     )
   ) {
-    flashIndexButtonSuccess();
+    registerSpamClick();
     markCityFresh(cityId, worldId);
     return;
   }
@@ -304,6 +306,7 @@ function indexCurrentCity() {
     .then((success) => {
       if (success) {
         incrementIndexCount();
+        resetSpamMeter();
         flashIndexButtonSuccess();
         markCityFresh(cityId, worldId);
         rememberSubmission(

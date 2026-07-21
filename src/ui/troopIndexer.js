@@ -1,4 +1,4 @@
-import { SECONDARY_COLOR, PRIMARY_COLOR } from "./theme.js";
+import { SECONDARY_COLOR, PRIMARY_COLOR, WARNING_YELLOW, WARNING_RED } from "./theme.js";
 import logoIcon from "../../assets/logo-icon.png";
 
 const UNIT_BOX_SELECTOR = ".nui_units_box";
@@ -239,6 +239,185 @@ export function flashIndexButtonSuccess() {
     btn.style.boxShadow = DEFAULT_BUTTON_BOX_SHADOW;
     if (icon) icon.style.transform = "scale(1)";
   }, SUCCESS_FLASH_MS);
+}
+
+// Spam-click mechanic: a "spam click" is a click the dedupe layer flagged
+// as a duplicate (see registerSpamClick's caller in index.js) — clicking
+// with nothing changed. Builds a 0-100 charge meter on the index button
+// (scale/glow/color) that continuously decays back to baseline if clicks
+// aren't fast enough to keep pace (~4/sec), and "pops" — a shake + a red
+// shockwave ring, then a smooth afterglow back to normal — once full.
+// Tuned via a standalone side-by-side demo before landing here; these
+// constants match what was picked there.
+const SPAM_METER_FILL_PER_CLICK = 100 / 6; // 6 clicks to pop
+const SPAM_METER_DECAY_PER_SEC = 140;
+const SPAM_METER_DECAY_DELAY_MS = 200;
+const SPAM_METER_CLIMAX_LOCK_MS = 1000;
+const POP_SHAKE_STYLE_ID = "gt-pop-shake-style";
+const POP_SHAKE_CLASS = "gt-pop-shake";
+
+// Button padding is 3px each side around an 18px icon (see buildButton) —
+// growing past that starts visibly bleeding out of the button's own square,
+// so this caps how far the icon can scale regardless of intensity/value.
+const SPAM_MAX_ICON_SCALE = (18 + 3 + 3) / 18;
+
+let spamIntensity = 0;
+let spamLastClick = 0;
+let spamDecayTimer = null;
+let spamLocked = false;
+let spamLockTimer = null;
+
+function spamColorFor(value) {
+  if (value < 60) return SECONDARY_COLOR;
+  if (value < 90) return WARNING_YELLOW;
+  return WARNING_RED;
+}
+
+function spamScale(value) {
+  const scale = 1 + (value / 100) * (SPAM_MAX_ICON_SCALE - 1);
+  return `scale(${scale.toFixed(3)})`;
+}
+
+// Color/glow only — safe to call at any time, including throughout a pop's
+// afterglow, since nothing else ever touches border-color/box-shadow.
+function applySpamColor(value) {
+  const btn = document.getElementById(DEFENSE_BUTTON_ID);
+  if (!btn) return;
+  const color = spamColorFor(value);
+  btn.style.borderColor = color;
+  btn.style.boxShadow = `0 0 ${(4 + value * 0.26).toFixed(0)}px 1px ${color}`;
+}
+
+function applySpamVisual(value) {
+  const btn = document.getElementById(DEFENSE_BUTTON_ID);
+  if (!btn) return;
+  const icon = btn.querySelector("img");
+  // While the pop's CSS shake animation is active, it exclusively owns
+  // `transform` for its own fixed duration — writing to it here too would
+  // just get silently overridden until the animation ends. See spamPop:
+  // the afterglow there only ever calls applySpamColor, never this, so
+  // there's no point where two things are both trying to own transform.
+  if (icon && !icon.classList.contains(POP_SHAKE_CLASS)) {
+    icon.style.transform = spamScale(value);
+  }
+  applySpamColor(value);
+}
+
+function stopSpamDecay() {
+  if (spamDecayTimer) {
+    clearInterval(spamDecayTimer);
+    spamDecayTimer = null;
+  }
+}
+
+function startSpamDecay() {
+  stopSpamDecay();
+  spamDecayTimer = setInterval(() => {
+    spamIntensity = Math.max(0, spamIntensity - SPAM_METER_DECAY_PER_SEC / 20);
+    applySpamVisual(spamIntensity);
+    if (spamIntensity <= 0) stopSpamDecay();
+  }, 50);
+}
+
+// CSS keyframes can't be expressed via inline style attributes, so the pop
+// shake needs an actual stylesheet — injected once, lazily, rather than as
+// an unconditional module-load side effect. Peaks are derived from
+// SPAM_MAX_ICON_SCALE so the shake never exceeds the same bound as the
+// regular charge-up scaling.
+function ensurePopShakeStyle() {
+  if (document.getElementById(POP_SHAKE_STYLE_ID)) return;
+  const peak = SPAM_MAX_ICON_SCALE;
+  const mid = 1 + (peak - 1) * 0.65;
+  const tail = 1 + (peak - 1) * 0.36;
+  const style = document.createElement("style");
+  style.id = POP_SHAKE_STYLE_ID;
+  style.textContent = `
+    @keyframes gtPopShake {
+      0%   { transform: scale(1) rotate(0deg); }
+      16%  { transform: scale(${peak.toFixed(3)}) rotate(-7deg); }
+      38%  { transform: scale(${mid.toFixed(3)}) rotate(5deg); }
+      62%  { transform: scale(${tail.toFixed(3)}) rotate(-2.5deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+    .${POP_SHAKE_CLASS} {
+      animation: gtPopShake 0.55s cubic-bezier(.25, .46, .45, .94);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function spamPop() {
+  ensurePopShakeStyle();
+  stopSpamDecay();
+  spamIntensity = 0;
+
+  spamLocked = true;
+  clearTimeout(spamLockTimer);
+
+  // The icon's scale is owned entirely by the shake animation below, start
+  // to finish (it always ends at its own neutral scale(1) on its own fixed
+  // 0.55s schedule) — the afterglow interval further down only ever fades
+  // color/glow, so there's never a point where two things hand `transform`
+  // back and forth and jump.
+  applySpamColor(100);
+
+  const btn = document.getElementById(DEFENSE_BUTTON_ID);
+  const icon = btn?.querySelector("img");
+  if (icon) {
+    icon.classList.remove(POP_SHAKE_CLASS);
+    void icon.offsetWidth; // restart the keyframe animation
+    icon.classList.add(POP_SHAKE_CLASS);
+    icon.addEventListener("animationend", () => icon.classList.remove(POP_SHAKE_CLASS), {
+      once: true,
+    });
+  }
+
+  const start = Date.now();
+  spamDecayTimer = setInterval(() => {
+    const remaining = Math.max(0, 1 - (Date.now() - start) / SPAM_METER_CLIMAX_LOCK_MS) * 100;
+    applySpamColor(remaining);
+    if (remaining <= 0) stopSpamDecay();
+  }, 50);
+
+  spamLockTimer = setTimeout(() => {
+    spamLocked = false;
+  }, SPAM_METER_CLIMAX_LOCK_MS);
+}
+
+// Called once per click the dedupe layer flags as a duplicate.
+export function registerSpamClick() {
+  if (spamLocked) return;
+  stopSpamDecay();
+  spamLastClick = Date.now();
+  spamIntensity += SPAM_METER_FILL_PER_CLICK;
+  if (spamIntensity >= 100) {
+    spamPop();
+    return;
+  }
+  applySpamVisual(spamIntensity);
+  setTimeout(() => {
+    if (spamLocked) return;
+    if (Date.now() - spamLastClick >= SPAM_METER_DECAY_DELAY_MS) startSpamDecay();
+  }, SPAM_METER_DECAY_DELAY_MS + 10);
+}
+
+// Called after a genuine (non-duplicate) successful index — that's not
+// spamming, so any in-progress charge shouldn't carry over.
+export function resetSpamMeter() {
+  stopSpamDecay();
+  clearTimeout(spamLockTimer);
+  spamLocked = false;
+  spamIntensity = 0;
+
+  const btn = document.getElementById(DEFENSE_BUTTON_ID);
+  if (!btn) return;
+  btn.style.borderColor = SECONDARY_COLOR;
+  btn.style.boxShadow = DEFAULT_BUTTON_BOX_SHADOW;
+  const icon = btn.querySelector("img");
+  if (icon) {
+    icon.classList.remove(POP_SHAKE_CLASS);
+    icon.style.transform = "";
+  }
 }
 
 // #defense_header sits inside a dialog (#place_defense) whose total height
