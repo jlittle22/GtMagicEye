@@ -326,8 +326,7 @@ export function watchDefenseHeader(onClick) {
 const TOWN_INDICATOR_ID = "gt-town-indicator";
 const TOWN_INDICATOR_DOT_ID = `${TOWN_INDICATOR_ID}-dot`;
 // __STALE_AFTER_DAYS__ injected at build time from config.cjs, see build.cjs
-// const STALE_THRESHOLD_MS = __STALE_AFTER_DAYS__ * 24 * 60 * 60 * 1000;
-const STALE_THRESHOLD_MS = 5 * 60000;
+const STALE_THRESHOLD_MS = __STALE_AFTER_DAYS__ * 24 * 60 * 60 * 1000;
 
 // Grepolis's own timestamps in-game are server-time, but there's no single
 // server time here — always New York, regardless of viewer's local zone,
