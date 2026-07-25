@@ -46,6 +46,12 @@
         min-height: 1.2em;
         margin-top: 8px;
       }
+      .privacy-link {
+        display: block;
+        margin-top: 20px;
+        font-size: 11px;
+        color: #8bc948;
+      }
     </style>
   </head>
   <body>
@@ -68,6 +74,7 @@
       <button type="submit">Log in</button>
     </form>
     <div id="error"></div>
+    <a class="privacy-link" href="/privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a>
 
     <script>
       var params = new URLSearchParams(location.search);

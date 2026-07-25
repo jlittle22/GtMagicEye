@@ -21,8 +21,10 @@ function shellSource({ name, namespace, baseUrl, updateUrl }) {
 // @include      https://*.grepolis.com/game/*
 // @include      https://grepodata.com*
 // @exclude      view-source://*
-${updateLines}// @copyright    2026, Jake Little
+${updateLines}// @supportURL   mailto:jakelittle135@gmail.com
+// @copyright    2026, Grass Touchers
 // @grant        none
+// Privacy policy: ${baseUrl}/privacy
 // ==/UserScript==
 
 (function () {

@@ -78,6 +78,21 @@ function buildPanel() {
   note.style.cssText = "font-size:11px;color:#aaa;margin-top:4px;";
   panel.appendChild(note);
 
+  const privacyLink = document.createElement("a");
+  privacyLink.textContent = "Privacy policy";
+  privacyLink.href = `${__API_BASE__}/privacy`;
+  privacyLink.target = "_blank";
+  privacyLink.rel = "noopener noreferrer";
+  privacyLink.style.cssText = [
+    "display:block",
+    "margin-top:10px",
+    "padding-top:10px",
+    `border-top:1px solid ${SECONDARY_COLOR}`,
+    "font-size:11px",
+    `color:${SECONDARY_COLOR}`,
+  ].join(";");
+  panel.appendChild(privacyLink);
+
   return panel;
 }
 
