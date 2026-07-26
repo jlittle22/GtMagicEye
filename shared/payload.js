@@ -17,6 +17,9 @@ export const CityReport = z.object({
   // e.g. "us145", parsed from the game hostname (<world>.grepolis.com).
   worldId: z.string(),
   playerId: z.number().int().optional(),
+  // Grepolis lets a player rename; playerId is what stays stable, this is
+  // just for display next to it.
+  playerName: z.string().optional(),
   allianceId: z.number().int().optional(),
   x: z.number().int().optional(),
   y: z.number().int().optional(),

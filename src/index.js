@@ -266,6 +266,9 @@ function indexCurrentCity() {
   // warning-worthy failure the way a missing cityId/cityName would be.
   const allianceId = window.Game && window.Game.alliance_id;
 
+  const playerId = window.Game && window.Game.player_id;
+  const playerName = window.Game && window.Game.player_name;
+
   let supportTroops;
   let supportDetails;
   const breakdown = readCityDefenseBreakdown();
@@ -296,6 +299,8 @@ function indexCurrentCity() {
       cityId: cityId || 0,
       worldId,
       ...(cityName ? { cityName } : {}),
+      ...(typeof playerId === "number" ? { playerId } : {}),
+      ...(playerName ? { playerName } : {}),
       ...(typeof allianceId === "number" ? { allianceId } : {}),
       troops,
       ...(supportTroops ? { supportTroops } : {}),

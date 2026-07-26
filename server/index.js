@@ -11,7 +11,21 @@ import { loginUser } from "./auth.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { storeSessionToken, consumeSessionToken } from "./loginSessions.js";
 import { ReportDocument } from "./database/reportDocument.js";
+import { CityStateDocument } from "./database/cityStateDocument.js";
+import { PlayerDocument } from "./database/playerDocument.js";
 import { reportsLimiter, loginLimiter } from "./middleware/rateLimit.js";
+
+// Mongo's driver serializes explicit `undefined` values rather than
+// omitting them, which would turn "this report didn't capture a field" into
+// "overwrite the projection's existing value with null" on the next upsert.
+// Stripping them keeps partial updates partial.
+function stripUndefined(obj) {
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -125,6 +139,10 @@ app.post("/api/reports", requireAuth, reportsLimiter, async (req, res) => {
 
   if (docsToInsert.length > 0) {
     try {
+      // Assigned up front (rather than relying on the driver to mutate
+      // docsToInsert with generated ids) so the cityState projection below
+      // can point lastReportId at the exact row it was derived from.
+      for (const doc of docsToInsert) doc._id = new ObjectId();
       await getDb().collection("reports").insertMany(docsToInsert);
     } catch (err) {
       console.error("[server] failed to persist reports", err);
@@ -142,6 +160,77 @@ app.post("/api/reports", requireAuth, reportsLimiter, async (req, res) => {
       .updateOne({ _id: new ObjectId(req.user._id) }, { $set: { lastReportedAt: insertedAt } });
   } catch (err) {
     console.error("[server] failed to update lastReportedAt", err);
+  }
+
+  // Best-effort, same reasoning as above. Runs for every report in the
+  // batch, including dedup-suppressed ones — cityName/allianceId aren't part
+  // of the dedup signature (see reportContentSignature), so a
+  // content-duplicate report can still carry a genuine name/alliance
+  // change. A duplicate has no doc._id (nothing new was inserted for it),
+  // so its cityState upsert refreshes everything except lastReportId,
+  // which keeps pointing at whichever report actually backs it.
+  try {
+    const cityStateOps = docs.map((doc) => {
+      const candidate = CityStateDocument.parse({
+        worldId: doc.worldId,
+        cityId: doc.cityId,
+        cityName: doc.cityName,
+        playerId: doc.playerId,
+        playerName: doc.playerName,
+        allianceId: doc.allianceId,
+        x: doc.x,
+        y: doc.y,
+        troops: doc.troops,
+        supportTroops: doc.supportTroops,
+        supportDetails: doc.supportDetails,
+        lastObservedAt: doc.observedAt,
+        lastReportedAt: insertedAt,
+        lastReportId: doc._id,
+        lastReportedBy: doc.submittedBy,
+      });
+      return {
+        updateOne: {
+          filter: { worldId: doc.worldId, cityId: doc.cityId },
+          update: { $set: stripUndefined(candidate) },
+          upsert: true,
+        },
+      };
+    });
+    if (cityStateOps.length > 0) {
+      await getDb().collection("cityState").bulkWrite(cityStateOps);
+    }
+
+    // Keyed on the real Grepolis player id (Game.player_id). A batch is
+    // currently always one report, but if that ever changes, the
+    // most-recently-observed one wins rather than array order.
+    const latestDoc = docs.reduce(
+      (latest, doc) => (!latest || doc.observedAt > latest.observedAt ? doc : latest),
+      null
+    );
+    // playerId is optional on CityReport — older/un-updated clients won't
+    // send it yet, and there's no player identity to upsert without it.
+    if (latestDoc && latestDoc.playerId != null) {
+      const playerCandidate = PlayerDocument.parse({
+        worldId: latestDoc.worldId,
+        playerId: latestDoc.playerId,
+        playerName: latestDoc.playerName,
+        submittedById: latestDoc.submittedBy._id,
+        username: latestDoc.submittedBy.username,
+        currentAllianceId: latestDoc.allianceId,
+        lastCityId: latestDoc.cityId,
+        lastCityName: latestDoc.cityName,
+        lastReportedAt: insertedAt,
+      });
+      await getDb()
+        .collection("players")
+        .updateOne(
+          { worldId: latestDoc.worldId, playerId: latestDoc.playerId },
+          { $set: stripUndefined(playerCandidate) },
+          { upsert: true }
+        );
+    }
+  } catch (err) {
+    console.error("[server] failed to update cityState/players projections", err);
   }
 
   const skipped = docs.length - docsToInsert.length;

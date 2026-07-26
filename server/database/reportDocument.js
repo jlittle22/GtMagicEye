@@ -23,6 +23,7 @@ export const ReportDocument = z.object({
   cityName: z.string().optional(),
   worldId: z.string(),
   playerId: z.number().int().optional(),
+  playerName: z.string().optional(),
   allianceId: z.number().int().optional(),
   x: z.number().int().optional(),
   y: z.number().int().optional(),
