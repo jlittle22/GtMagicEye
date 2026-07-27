@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
+import next from "next";
 import { ObjectId } from "mongodb";
 import { ReportPayload } from "../shared/payload.js";
 import { reportContentSignature } from "../shared/reportDedup.js";
@@ -42,9 +43,13 @@ app.use(express.json({ limit: "1mb" }));
 // container is finalized.
 app.use(express.static(path.join(__dirname, "..", "dist")));
 
-// Static assets (landing page, logo) — express.static serves index.html for
-// "/" automatically, so this alone handles the landing page route.
+// Static assets (install page, logo) — served by name (install.html, not
+// index.html), so this doesn't auto-claim "/"; that's the Next.js app's now.
 app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/install", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "install.html"));
+});
 
 app.get("/login", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
@@ -265,15 +270,27 @@ app.get("/api/reports/last", requireAuth, async (req, res) => {
   }
 });
 
+// Dashboard webapp, mounted into this same process/domain rather than run as
+// a separate service — magiceye.grasstouchers.gg needs to stay the one
+// domain, and the two don't need runtime isolation from each other. Its
+// pages (/overview, /scenarios, ...) own everything not already claimed by a
+// route or static file above, including "/" itself.
+const nextApp = next({
+  dev: process.env.NODE_ENV !== "production",
+  dir: path.join(__dirname, "..", "webapp"),
+});
+const handleNextRequest = nextApp.getRequestHandler();
+app.all("*", (req, res) => handleNextRequest(req, res));
+
 const port = process.env.PORT || 8080;
 
-connectDb()
+Promise.all([connectDb(), nextApp.prepare()])
   .then(() => {
     app.listen(port, "0.0.0.0", () => {
       console.log(`Server listening on :${port}`);
     });
   })
   .catch((err) => {
-    console.error("Failed to connect to MongoDB", err);
+    console.error("Failed to start server", err);
     process.exit(1);
   });

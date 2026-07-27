@@ -4,16 +4,22 @@
   "private": true,
   "type": "module",
   "description": "Grepolis Tampermonkey userscript",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "webapp"
+  ],
   "scripts": {
-    "build": "node build.cjs && node build-shell.cjs",
-    "build:obfuscated": "node build.cjs --obfuscate && node build-shell.cjs",
+    "build": "node build.cjs && node build-shell.cjs && npm run build --workspace=webapp",
+    "build:obfuscated": "node build.cjs --obfuscate && node build-shell.cjs && npm run build --workspace=webapp",
     "watch": "node build.cjs --watch",
     "dev": "node build.cjs --serve",
     "build:shell": "node build-shell.cjs",
     "server": "node server/index.js",
     "create-user": "node scripts/createUser.js",
     "start": "node server/index.js",
-    "gcp-build": "node build.cjs && node build-shell.cjs",
+    "gcp-build": "node build.cjs && node build-shell.cjs && npm run build --workspace=webapp",
     "deploy": "gcloud run deploy grass-touchers --source . --project=grass-touchers-b9882344 --region=us-west1 --allow-unauthenticated --set-env-vars=MONGODB_DB=grass_touchers --set-secrets=MONGODB_URI=MONGODB_URI:latest,JWT_SECRET=JWT_SECRET:latest"
   },
   "dependencies": {
@@ -24,6 +30,7 @@
     "express-rate-limit": "^8.6.0",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.8.0",
+    "next": "16.2.12",
     "zod": "^3.23.8"
   },
   "devDependencies": {
