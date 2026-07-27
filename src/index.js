@@ -20,7 +20,6 @@ import {
   readCurrentCityName,
   readCityDefenseBreakdown,
   readWorldId,
-  incrementIndexCount,
   flashIndexButtonSuccess,
   registerSpamClick,
   resetSpamMeter,
@@ -310,7 +309,6 @@ function indexCurrentCity() {
   ])
     .then((success) => {
       if (success) {
-        incrementIndexCount();
         resetSpamMeter();
         flashIndexButtonSuccess();
         markCityFresh(cityId, worldId);

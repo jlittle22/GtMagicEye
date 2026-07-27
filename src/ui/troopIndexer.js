@@ -127,59 +127,31 @@ export function readCityDefenseBreakdown() {
 
 const BADGE_RED = "#c0392b";
 
-// Session-scoped only (resets on page reload) — not persisted anywhere.
-let indexCount = 0;
-
-function badgeId(buttonId) {
-  return `${buttonId}-badge`;
+function staleDotId(buttonId) {
+  return `${buttonId}-stale-dot`;
 }
 
-// Hidden at 0 (nothing indexed yet this session), then visible for the rest
-// of the session once it ticks up at least once. Stays red throughout —
-// no green "success" state, red is just the "you've indexed N" indicator.
-function buildBadge(buttonId) {
-  const badge = document.createElement("div");
-  badge.id = badgeId(buttonId);
-  badge.textContent = String(indexCount);
-  badge.style.cssText = [
+// Same visual language as the town name tile's dot (TOWN_INDICATOR_DOT_ID)
+// and the city menu's per-row dots (buildStaleDot) — this is a third
+// renderer of the same "is this city stale" fact, not its own indicator.
+// Hidden by default; setTownIndicatorState is what flips it, since that's
+// already the single place staleness gets computed for the current city.
+function buildIndexButtonStaleDot(buttonId) {
+  const dot = document.createElement("span");
+  dot.id = staleDotId(buttonId);
+  dot.style.cssText = [
     "position:absolute",
-    "top:-6px",
-    "right:-6px",
-    "width:12px",
-    "height:12px",
+    "top:-4px",
+    "right:-4px",
+    "width:7px",
+    "height:7px",
     "border-radius:50%",
     `background:${BADGE_RED}`,
-    "color:#fff",
-    "font:bold 7px sans-serif",
-    "align-items:center",
-    "justify-content:center",
-    "box-shadow:0 1px 3px rgba(0,0,0,0.5)",
-    `display:${indexCount > 0 ? "flex" : "none"}`,
+    "box-shadow:0 0 0 1px rgba(0,0,0,0.45)",
+    "display:none",
+    "pointer-events:none",
   ].join(";");
-  return badge;
-}
-
-// "Index Troops" before anything's been indexed this session (badge is
-// still hidden at 0); once it has, the tooltip reports the running count
-// instead, matching what the badge itself is showing.
-function indexButtonTitle() {
-  return indexCount > 0
-    ? `Indexed ${indexCount} ${indexCount === 1 ? "report" : "reports"} this session`
-    : "Index Troops";
-}
-
-// Bumps the count and updates the currently-rendered badge in place, since
-// watchAndInject may not re-run before the next click.
-export function incrementIndexCount() {
-  indexCount += 1;
-  const btn = document.getElementById(DEFENSE_BUTTON_ID);
-  if (btn) btn.title = indexButtonTitle();
-
-  const el = document.getElementById(badgeId(DEFENSE_BUTTON_ID));
-  if (el) {
-    el.textContent = String(indexCount);
-    el.style.display = "flex";
-  }
+  return dot;
 }
 
 const DEFAULT_POSITION = ["top:2px", "right:2px"];
@@ -194,17 +166,19 @@ const DEFAULT_BUTTON_BOX_SHADOW = "0 1px 4px rgba(0,0,0,0.4)";
 function buildButton(id, onClick, positionStyle = DEFAULT_POSITION) {
   const btn = document.createElement("div");
   btn.id = id;
-  btn.title = indexButtonTitle();
+  btn.title = "Index Troops";
   btn.style.cssText = [
     "position:absolute",
     ...positionStyle,
     "z-index:1000",
-    "padding:3px",
-    "line-height:0",
+    "display:flex",
+    "align-items:center",
+    "gap:6px",
+    "padding:4px 10px 4px 4px",
     "cursor:pointer",
     `background:${PRIMARY_COLOR}`,
     `border:1px solid ${SECONDARY_COLOR}`,
-    "border-radius:4px",
+    "border-radius:6px",
     `box-shadow:${DEFAULT_BUTTON_BOX_SHADOW}`,
     "transition:box-shadow 0.15s ease",
   ].join(";");
@@ -216,8 +190,13 @@ function buildButton(id, onClick, positionStyle = DEFAULT_POSITION) {
     "display:block;width:18px;height:18px;transition:transform 0.15s ease;";
   btn.appendChild(icon);
 
+  const label = document.createElement("span");
+  label.textContent = "Index";
+  label.style.cssText = "color:#fff;font:600 12px sans-serif;white-space:nowrap;";
+  btn.appendChild(label);
+
   btn.addEventListener("click", onClick);
-  btn.appendChild(buildBadge(id));
+  btn.appendChild(buildIndexButtonStaleDot(id));
   return btn;
 }
 
@@ -256,10 +235,12 @@ const SPAM_METER_CLIMAX_LOCK_MS = 1000;
 const POP_SHAKE_STYLE_ID = "gt-pop-shake-style";
 const POP_SHAKE_CLASS = "gt-pop-shake";
 
-// Button padding is 3px each side around an 18px icon (see buildButton) —
-// growing past that starts visibly bleeding out of the button's own square,
-// so this caps how far the icon can scale regardless of intensity/value.
-const SPAM_MAX_ICON_SCALE = (18 + 3 + 3) / 18;
+// The icon's tightest clearance is the button's 4px top/bottom/left padding
+// around the 18px icon (see buildButton) — the "Index" label sits further
+// away across a 6px gap, so top/bottom/left is what growing past starts
+// visibly bleeding out of first. Caps how far the icon can scale regardless
+// of intensity/value.
+const SPAM_MAX_ICON_SCALE = (18 + 4 + 4) / 18;
 
 let spamIntensity = 0;
 let spamLastClick = 0;
@@ -576,11 +557,15 @@ export function injectTownIndicator() {
   group.appendChild(nameEl);
 }
 
-// Updates the currently-rendered indicator in place: red dot when the last
-// report is more than a week old (or there isn't one), plus a hover tooltip
-// with the exact timestamp. lastReportedAt is a Date, or null if the city
-// has never been indexed. Returns the computed isStale so callers (e.g. the
-// stale-city tally) can reuse it instead of duplicating the threshold logic.
+// Updates every "is this city stale" indicator for the currently-active city
+// in place: the town name tile's dot, plus the Defense-tab index button's
+// dot (both only ever reflect window.Game.townId, the same city this is
+// always called for — see markCityFresh/refreshTownIndicator in index.js).
+// Red dot when the last report is more than STALE_THRESHOLD_MS old (or there
+// isn't one), plus a hover tooltip with the exact timestamp on the town
+// tile. lastReportedAt is a Date, or null if the city has never been
+// indexed. Returns the computed isStale so callers (e.g. the stale-city
+// tally) can reuse it instead of duplicating the threshold logic.
 export function setTownIndicatorState(lastReportedAt) {
   const isStale =
     !lastReportedAt ||
@@ -596,6 +581,9 @@ export function setTownIndicatorState(lastReportedAt) {
       : "Never indexed";
     wrap.title = isStale ? `Index needed! ${baseTitle}` : baseTitle;
   }
+
+  const buttonDot = document.getElementById(staleDotId(DEFENSE_BUTTON_ID));
+  if (buttonDot) buttonDot.style.display = isStale ? "block" : "none";
 
   return isStale;
 }
