@@ -292,7 +292,7 @@ still JS running in the user's own browser, inspectable via devtools regardless)
 | POST   | `/api/auth/login`             | —            | Rate-limited 10/15min per IP; returns `{ token }`  |
 | POST   | `/api/auth/session/:sessionId`| —            | Stashes a token for the polling userscript tab      |
 | GET    | `/api/auth/session/:sessionId`| —            | Polled by the userscript; 404 until claimed         |
-| POST   | `/api/reports`                | Bearer JWT   | Rate-limited 20/min per account                     |
+| POST   | `/api/reports`                | Bearer JWT   | Rate-limited 200/min per account                    |
 | GET    | `/api/reports/last`           | Bearer JWT   | `?cityId=&worldId=` — last report time for a city   |
 | GET    | `/*` (`/overview`, ...)       | —            | Falls through to the Next.js dashboard              |
 

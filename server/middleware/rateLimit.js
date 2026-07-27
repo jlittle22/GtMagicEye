@@ -4,7 +4,7 @@ import rateLimit from "express-rate-limit";
 // than IP so it actually stops a single spamming user, not just their NAT.
 export const reportsLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 20,
+  max: 200,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.user.username,
