@@ -131,26 +131,45 @@ function staleDotId(buttonId) {
   return `${buttonId}-stale-dot`;
 }
 
-// Same visual language as the town name tile's dot (TOWN_INDICATOR_DOT_ID)
-// and the city menu's per-row dots (buildStaleDot) — this is a third
-// renderer of the same "is this city stale" fact, not its own indicator.
-// Hidden by default; setTownIndicatorState is what flips it, since that's
-// already the single place staleness gets computed for the current city.
-function buildIndexButtonStaleDot(buttonId) {
+// Last staleness setTownIndicatorState computed for the currently-active
+// city. Needed because the Defense-tab button (and its dot) gets wiped and
+// rebuilt by the game on every city switch/window reopen (see
+// watchAndInject's comment) — a freshly built dot always starts hidden
+// (buildIndexButtonStaleDot), and setTownIndicatorState may well have last
+// run before that rebuild happened, so nothing else re-applies the current
+// state to it. ensureButtonAt re-applies this value itself right after
+// building, closing that gap.
+let lastKnownIsStale = false;
+
+// Single source for what a "stale" dot looks like — every red dot in the
+// script (town name tile, Defense-tab index button, per-row city list
+// entries) is built from this, so they can never silently drift apart in
+// size/color/shape again. Only position/display genuinely differ per call
+// site (absolute overlay on a small icon vs. inline next to list text),
+// which is exactly what extraStyle is for.
+function buildStaleDotElement(extraStyle = []) {
   const dot = document.createElement("span");
-  dot.id = staleDotId(buttonId);
   dot.style.cssText = [
-    "position:absolute",
-    "top:-4px",
-    "right:-4px",
     "width:7px",
     "height:7px",
     "border-radius:50%",
     `background:${BADGE_RED}`,
     "box-shadow:0 0 0 1px rgba(0,0,0,0.45)",
-    "display:none",
     "pointer-events:none",
+    ...extraStyle,
   ].join(";");
+  return dot;
+}
+
+// Positioned like the town tile's dot: top-right corner of just the icon
+// (-2px offsets against a similarly-sized icon), not the whole button —
+// buildButton appends this into the icon's own wrapper, not btn itself, so
+// it tracks the icon regardless of the button's padding/label width. Hidden
+// by default; setTownIndicatorState is what flips it, since that's already
+// the single place staleness gets computed for the current city.
+function buildIndexButtonStaleDot(buttonId) {
+  const dot = buildStaleDotElement(["position:absolute", "top:-2px", "right:-2px", "display:none"]);
+  dot.id = staleDotId(buttonId);
   return dot;
 }
 
@@ -183,12 +202,20 @@ function buildButton(id, onClick, positionStyle = DEFAULT_POSITION) {
     "transition:box-shadow 0.15s ease",
   ].join(";");
 
+  // Own positioned wrapper (not btn itself) so the stale dot anchors to the
+  // 18x18 icon's own corner regardless of the button's padding/label width
+  // — see buildIndexButtonStaleDot.
+  const iconWrap = document.createElement("span");
+  iconWrap.style.cssText = "position:relative;display:block;width:18px;height:18px;";
+
   const icon = document.createElement("img");
   icon.src = logoIcon;
   icon.alt = "Index Troops";
   icon.style.cssText =
     "display:block;width:18px;height:18px;transition:transform 0.15s ease;";
-  btn.appendChild(icon);
+  iconWrap.appendChild(icon);
+  iconWrap.appendChild(buildIndexButtonStaleDot(id));
+  btn.appendChild(iconWrap);
 
   const label = document.createElement("span");
   label.textContent = "Index";
@@ -196,7 +223,6 @@ function buildButton(id, onClick, positionStyle = DEFAULT_POSITION) {
   btn.appendChild(label);
 
   btn.addEventListener("click", onClick);
-  btn.appendChild(buildIndexButtonStaleDot(id));
   return btn;
 }
 
@@ -444,6 +470,9 @@ function ensureButtonAt(selector, buttonId, onClick, options = {}) {
     container.style.alignItems = "center";
   }
   container.appendChild(buildButton(buttonId, onClick, options.positionStyle));
+
+  const dot = document.getElementById(staleDotId(buttonId));
+  if (dot) dot.style.display = lastKnownIsStale ? "block" : "none";
 }
 
 // Both target elements get re-rendered by the game (city switch for the units
@@ -512,20 +541,8 @@ function buildTownIndicator() {
     "display:block;width:14px;height:14px;pointer-events:none;";
   wrap.appendChild(icon);
 
-  const dot = document.createElement("span");
+  const dot = buildStaleDotElement(["position:absolute", "top:-2px", "right:-2px", "display:none"]);
   dot.id = TOWN_INDICATOR_DOT_ID;
-  dot.style.cssText = [
-    "position:absolute",
-    "top:-2px",
-    "right:-2px",
-    "width:7px",
-    "height:7px",
-    "border-radius:50%",
-    `background:${BADGE_RED}`,
-    "box-shadow:0 0 0 1px rgba(0,0,0,0.45)",
-    "display:none",
-    "pointer-events:none",
-  ].join(";");
   wrap.appendChild(dot);
 
   return wrap;
@@ -570,6 +587,7 @@ export function setTownIndicatorState(lastReportedAt) {
   const isStale =
     !lastReportedAt ||
     Date.now() - lastReportedAt.getTime() > STALE_THRESHOLD_MS;
+  lastKnownIsStale = isStale;
 
   const wrap = document.getElementById(TOWN_INDICATOR_ID);
   if (wrap) {
@@ -611,19 +629,9 @@ const TOWN_GROUP_ITEM_SELECTOR = ".town_group_town[data-townid]";
 const STALE_DOT_CLASS = "gt-stale-dot";
 
 function buildStaleDot() {
-  const dot = document.createElement("span");
+  const dot = buildStaleDotElement(["display:inline-block", "margin-left:4px", "vertical-align:middle"]);
   dot.className = STALE_DOT_CLASS;
   dot.title = "Index needed!";
-  dot.style.cssText = [
-    "display:inline-block",
-    "width:7px",
-    "height:7px",
-    "border-radius:50%",
-    `background:${BADGE_RED}`,
-    "margin-left:4px",
-    "vertical-align:middle",
-    "box-shadow:0 0 0 1px rgba(0,0,0,0.45)",
-  ].join(";");
   return dot;
 }
 

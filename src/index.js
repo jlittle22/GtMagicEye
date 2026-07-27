@@ -10,9 +10,14 @@ import {
 import { showLoginLink, hideLoginLink } from "./ui/loginPrompt.js";
 import {
   injectSettingsButton,
+  injectCityReportButton,
   injectStaleIndicator,
   setStaleIndicatorState,
 } from "./ui/settingsMenu.js";
+import {
+  showCityReportWindow,
+  refreshCityReportWindowIfOpen,
+} from "./ui/cityReportWindow.js";
 import { FEATURE_FLAGS } from "./featureFlags.js";
 import {
   watchDefenseHeader,
@@ -160,6 +165,32 @@ export async function fetchLastReportTime(cityId, worldId) {
   return value;
 }
 
+function getCityState(cityId, worldId, token) {
+  const params = new URLSearchParams({ cityId: String(cityId), worldId });
+  return fetch(`${API_BASE}/api/reports/cityState?${params}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
+// Not cached like fetchLastReportTime — this backs an on-demand button click,
+// not a background poll, so there's no repeated-call volume to save.
+export async function fetchCityState(cityId, worldId) {
+  const res = await authenticatedFetch((token) => getCityState(cityId, worldId, token));
+
+  if (!res || !res.ok) {
+    if (res) logger.error("failed to fetch city state", res.status);
+    return null;
+  }
+
+  const data = await res.json();
+  return {
+    troops: data.troops,
+    lastReportedAt: data.lastReportedAt ? new Date(data.lastReportedAt) : null,
+  };
+}
+
 // Session-scoped tally of distinct cities currently believed stale, keyed
 // the same way as lastReportCache so revisiting a city (however many times)
 // only ever counts its current state once. Storing explicit booleans (not
@@ -188,11 +219,14 @@ function registerCityStaleness(cityId, worldId, isStale) {
 // Updates everything that should reflect "this city's data is current as
 // of right now" — used both after a real submit and after a client-side
 // deduped skip, since in both cases the city genuinely is up to date.
-function markCityFresh(cityId, worldId) {
+// Optimistic (client clock, no re-fetch) like the rest of this function —
+// same instant-feedback reasoning as flashIndexButtonSuccess.
+function markCityFresh(cityId, worldId, troops) {
   const now = new Date();
   const isStale = setTownIndicatorState(now);
   cacheLastReportTime(cityId, worldId, now);
   registerCityStaleness(cityId, worldId, isStale);
+  refreshCityReportWindowIfOpen({ troops, lastReportedAt: now });
 }
 
 // Same-session, client-side half of dedup: if the troop/support content is
@@ -289,7 +323,7 @@ function indexCurrentCity() {
     )
   ) {
     registerSpamClick();
-    markCityFresh(cityId, worldId);
+    markCityFresh(cityId, worldId, troops);
     return;
   }
 
@@ -311,7 +345,7 @@ function indexCurrentCity() {
       if (success) {
         resetSpamMeter();
         flashIndexButtonSuccess();
-        markCityFresh(cityId, worldId);
+        markCityFresh(cityId, worldId, troops);
         rememberSubmission(
           cityId,
           worldId,
@@ -360,6 +394,39 @@ function withSpamGuard(fn, threshold = SPAM_CLICK_THRESHOLD) {
 watchDefenseHeader(withSpamGuard(indexCurrentCity));
 
 injectSettingsButton();
+
+// Standalone feature, not gated behind FEATURE_FLAGS.checkCityStaleness —
+// showing the current city's already-indexed troops doesn't depend on the
+// staleness-checking machinery below.
+function openCityReportWindow() {
+  const cityId = window.Game && window.Game.townId;
+  const worldId = readWorldId();
+  if (!cityId || !worldId) {
+    logger.warn("openCityReportWindow: could not determine cityId/worldId, skipping");
+    return;
+  }
+
+  fetchCityState(cityId, worldId)
+    .then((data) => showCityReportWindow(data))
+    .catch((err) => logger.error("openCityReportWindow failed", err));
+}
+
+injectCityReportButton(openCityReportWindow);
+
+// Keeps an already-open report window showing the city currently being
+// viewed, not whichever one was open when it was first launched. A no-op
+// (past the fetch) if the window isn't open — see refreshCityReportWindowIfOpen.
+function refreshCityReportWindow() {
+  const cityId = window.Game && window.Game.townId;
+  const worldId = readWorldId();
+  if (!cityId || !worldId) return;
+
+  fetchCityState(cityId, worldId)
+    .then((data) => refreshCityReportWindowIfOpen(data))
+    .catch((err) => logger.error("refreshCityReportWindow failed", err));
+}
+
+watchTownName(refreshCityReportWindow);
 
 // The icon itself always renders — only the live staleness check (and the
 // login prompt it can trigger) is gated by checkCityStaleness.

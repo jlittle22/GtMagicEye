@@ -1,9 +1,15 @@
-import { PRIMARY_COLOR, SECONDARY_COLOR, WARNING_YELLOW, WARNING_RED } from "./theme.js";
+import {
+  PRIMARY_COLOR,
+  SECONDARY_COLOR,
+  WARNING_YELLOW,
+  WARNING_RED,
+} from "./theme.js";
 import logoIcon from "../../assets/logo-icon.png";
 import { FEATURE_FLAGS, setFeatureFlag } from "../featureFlags.js";
 
 const BUTTON_ID = "gt-settings-btn";
 const PANEL_ID = "gt-settings-panel";
+const CITY_REPORT_BUTTON_ID = "gt-city-report-btn";
 const STALE_INDICATOR_ID = "gt-stale-indicator";
 
 const FLAG_LABELS = {
@@ -143,9 +149,47 @@ export function injectSettingsButton() {
   document.body.appendChild(btn);
 }
 
-// Sits to the right of the settings button, at the same height — since the
-// panel opens upward from the button (bottom:60px), that spot stays clear
-// whether or not the panel is open.
+// Sits to the right of the settings button, same height, same reasoning as
+// injectStaleIndicator below: opens on click, doesn't need a panel of its
+// own to stay clear of.
+export function injectCityReportButton(onClick) {
+  if (document.getElementById(CITY_REPORT_BUTTON_ID)) return;
+
+  const btn = document.createElement("div");
+  btn.id = CITY_REPORT_BUTTON_ID;
+  btn.title = "Last index";
+  btn.style.cssText = [
+    "position:fixed",
+    "bottom:16px",
+    "left:60px",
+    "z-index:100000",
+    "width:36px",
+    "height:36px",
+    "border-radius:50%",
+    `background:${PRIMARY_COLOR}`,
+    `border:1px solid ${SECONDARY_COLOR}`,
+    "display:flex",
+    "align-items:center",
+    "justify-content:center",
+    "cursor:pointer",
+    "box-shadow:0 1px 4px rgba(0,0,0,0.4)",
+  ].join(";");
+
+  btn.innerHTML = [
+    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${SECONDARY_COLOR}"`,
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
+    '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>',
+    '<circle cx="12" cy="12" r="3"/>',
+    "</svg>",
+  ].join(" ");
+
+  btn.addEventListener("click", onClick);
+  document.body.appendChild(btn);
+}
+
+// Sits to the right of the city report button, at the same height — since
+// the panel opens upward from the settings button (bottom:60px), that spot
+// stays clear whether or not the panel is open.
 export function injectStaleIndicator() {
   if (document.getElementById(STALE_INDICATOR_ID)) return;
 
@@ -154,7 +198,7 @@ export function injectStaleIndicator() {
   el.style.cssText = [
     "position:fixed",
     "bottom:16px",
-    "left:60px",
+    "left:104px",
     "z-index:100000",
     "height:36px",
     "display:flex",

@@ -270,6 +270,33 @@ app.get("/api/reports/last", requireAuth, async (req, res) => {
   }
 });
 
+// Same worldId requirement as /api/reports/last, same reason. Projects only
+// native troops + freshness — supportTroops/supportDetails/identity fields
+// are deliberately left out since the only consumer (the in-game city report
+// panel) shows native counts only.
+app.get("/api/reports/cityState", requireAuth, async (req, res) => {
+  const cityId = Number(req.query.cityId);
+  const worldId = req.query.worldId;
+
+  if (!Number.isInteger(cityId) || typeof worldId !== "string" || !worldId) {
+    return res.status(400).json({ error: "cityId and worldId are required" });
+  }
+
+  try {
+    const state = await getDb()
+      .collection("cityState")
+      .findOne({ cityId, worldId }, { projection: { troops: 1, lastReportedAt: 1 } });
+
+    res.status(200).json({
+      troops: state ? state.troops : null,
+      lastReportedAt: state ? state.lastReportedAt : null,
+    });
+  } catch (err) {
+    console.error("[server] failed to look up city state", err);
+    res.status(500).json({ error: "failed to look up city state" });
+  }
+});
+
 // Dashboard webapp, mounted into this same process/domain rather than run as
 // a separate service — magiceye.grasstouchers.gg needs to stay the one
 // domain, and the two don't need runtime isolation from each other. Its
