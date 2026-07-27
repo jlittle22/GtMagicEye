@@ -42,6 +42,55 @@ const UNIT_LABELS = {
   militia: "Militia",
 };
 
+// Matches the game's own display order exactly — confirmed from two real
+// DOM examples (player_units: sword, archer, hoplite, chariot,
+// big_transporter, small_transporter; support_units's native total: archer,
+// hoplite, rider, attack_ship, siren — both are exact subsequences of this
+// list with zero-count types omitted) and independently from this world's
+// own award list order (killed_units_*, which iterates units in this same
+// sequence). militia isn't covered by either source — placed first as the
+// pre-Barracks "tier 0" defender, but that position is an assumption, not
+// evidence like the rest of this list.
+const UNIT_DISPLAY_ORDER = [
+  "militia",
+  "sword",
+  "slinger",
+  "archer",
+  "hoplite",
+  "rider",
+  "chariot",
+  "catapult",
+  "minotaur",
+  "manticore",
+  "zyklop",
+  "harpy",
+  "medusa",
+  "centaur",
+  "pegasus",
+  "cerberus",
+  "fury",
+  "griffin",
+  "calydonian_boar",
+  "satyr",
+  "spartoi",
+  "ladon",
+  "godsent",
+  "big_transporter",
+  "bireme",
+  "attack_ship",
+  "demolition_ship",
+  "small_transporter",
+  "trireme",
+  "colonize_ship",
+  "sea_monster",
+  "siren",
+];
+
+function unitOrderIndex(type) {
+  const index = UNIT_DISPLAY_ORDER.indexOf(type);
+  return index === -1 ? UNIT_DISPLAY_ORDER.length : index;
+}
+
 // Fixed to America/New_York regardless of the viewer's own timezone/locale
 // settings, per explicit requirement — this is a shared team reference
 // point, not a personalized display.
@@ -81,7 +130,7 @@ function buildTroopRows(troops) {
   }
 
   const entries = Object.entries(troops).filter(([, count]) => count > 0);
-  entries.sort((a, b) => b[1] - a[1]);
+  entries.sort((a, b) => unitOrderIndex(a[0]) - unitOrderIndex(b[0]));
 
   if (entries.length === 0) {
     return '<p style="color:#000;font-style:italic;">No troops present</p>';
@@ -130,48 +179,6 @@ function isWindowStillOpen() {
   return false;
 }
 
-// jQuery UI's dialog widget (what GPWindow's TYPE_DIALOG is built on, per
-// the .ui-draggable.ui-resizable classes on .ui-dialog) adds eight
-// absolutely-positioned .ui-resizable-handle strips around the edges. They
-// don't respect the dialog's own rounded-corner clip, so once something in
-// Grepolis's own blur/focus handling makes them visible (looks to be on
-// blur, going by when this was reported), the S/SW ones poke a pale sliver
-// out past the curved bottom corner.
-//
-// A plain `handle.style.display = "none"` set once at open time isn't
-// enough — whatever toggles these on blur is itself setting a fresh inline
-// display value later, which silently wins over ours since a plain inline
-// style is just "whoever wrote it last". An !important rule in an actual
-// stylesheet beats any non-!important inline style regardless of write
-// order, so tagging our dialog with a class and hiding via that survives
-// the later overwrite instead of just delaying it.
-const HIDE_HANDLES_STYLE_ID = "gt-city-report-hide-resize-handles";
-const DIALOG_TAG_CLASS = "gt-city-report-dialog";
-
-function ensureHideHandlesStyleInjected() {
-  if (document.getElementById(HIDE_HANDLES_STYLE_ID)) return;
-  const style = document.createElement("style");
-  style.id = HIDE_HANDLES_STYLE_ID;
-  style.textContent = `.${DIALOG_TAG_CLASS} .ui-resizable-handle { display: none !important; }`;
-  document.head.appendChild(style);
-}
-
-// Our content is static — there's nothing to gain from resizing — so this
-// hides the handles outright (rather than guessing at some unconfirmed
-// wnd.setResizable(false)-style method), removing the artifact and the
-// affordance together. Scoped to our own dialog via the same title-text
-// match isWindowStillOpen uses, so other native windows are untouched.
-// GPWindowMgr.Create builds a fresh .ui-dialog per call (confirmed via its
-// decompiled source), so this only needs to run once per open, not on every
-// content refresh — the tag class stays on the same dialog element.
-function tagDialogToHideResizeHandles() {
-  for (const el of document.getElementsByClassName("ui-dialog-title")) {
-    if (el.textContent !== WINDOW_TITLE) continue;
-    el.closest(".ui-dialog")?.classList.add(DIALOG_TAG_CLASS);
-    return;
-  }
-}
-
 // GPWindowMgr is the game's own window manager (confirmed live: Layout.wnd
 // === GPWindowMgr). TYPE_DIALOG gives a generic jQuery-UI-chrome'd window
 // whose content we fully control via setContent — unlike every other
@@ -195,8 +202,6 @@ export function showCityReportWindow(data) {
   wnd.setWidth(480);
   wnd.setHeight(200);
   wnd.setContent(buildCityReportHtml(data || {}));
-  ensureHideHandlesStyleInjected();
-  tagDialogToHideResizeHandles();
 }
 
 // Called on every city switch regardless of whether our dialog is open —
