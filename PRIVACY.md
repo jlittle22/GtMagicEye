@@ -1,6 +1,6 @@
 # Privacy Policy — GT Magic Eye
 
-**Last updated:** 2026-07-24
+**Last updated:** 2026-07-28
 
 GT Magic Eye ("the script", "the tool") is a userscript for the browser game
 Grepolis. This policy explains what data the script collects, why, where it
@@ -40,6 +40,19 @@ account or report data.
 
 We do not collect analytics, advertising identifiers, or any data unrelated
 to the features above, and the script does not use cookies.
+
+## Custom backend URLs
+
+The script has a setting that lets you point it at a backend other than
+`magiceye.grasstouchers.gg`. Everything in this policy describes only the
+official backend operated by us. The moment you configure a custom URL,
+everything the script would otherwise send us — account credentials, troop
+reports, your IP address, etc. — goes to whatever server you pointed it at
+instead, and none of the commitments in this policy (what's collected, who
+can see it, retention, deletion on request) apply to that server. We have
+no visibility into, and no control over, what a custom backend does with
+your data. That's between you and whoever operates it. Use custom backends
+at your own risk.
 
 ## Why we collect it
 

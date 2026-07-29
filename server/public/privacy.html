@@ -70,7 +70,7 @@
   <body>
     <img src="/logo.png" alt="Grass Touchers" />
     <h1>Privacy Policy — GT Magic Eye</h1>
-    <div class="updated">Last updated: 2026-07-24</div>
+    <div class="updated">Last updated: 2026-07-28</div>
 
     <p>
       GT Magic Eye ("the script", "the tool") is a userscript for the browser
@@ -87,15 +87,24 @@
 
     <h2>What data is sent, and when</h2>
     <p>
-      The script only sends data to <code>magiceye.grasstouchers.gg</code>,
-      and only when you are logged in and actively use its indexing feature
-      (e.g. opening a city's Defense tab in Grepolis).
+      The script only sends data to <code>magiceye.grasstouchers.gg</code>, and
+      only when you are logged in and actively use its indexing feature (e.g.
+      opening a city's Defense tab in Grepolis).
     </p>
 
-    <p><strong>Account data</strong>, created for you by an administrator (there is no self-service sign-up):</p>
+    <p>
+      <strong>Account data</strong>, created for you by an administrator (there
+      is no self-service sign-up):
+    </p>
     <ul>
-      <li>Username and a bcrypt-hashed password (we never store or transmit your plaintext password)</li>
-      <li>Account creation date, last login time, last report time, and approval/ban status</li>
+      <li>
+        Username and a bcrypt-hashed password (we never store or transmit your
+        plaintext password)
+      </li>
+      <li>
+        Account creation date, last login time, last report time, and
+        approval/ban status
+      </li>
     </ul>
 
     <p><strong>Report data</strong>, submitted when you index a city:</p>
@@ -103,22 +112,49 @@
       <li>City ID, city name, and coordinates</li>
       <li>World ID (e.g. <code>us145</code>)</li>
       <li>Your in-game player ID and alliance ID</li>
-      <li>Troop composition (unit counts) for the city, including support troops and, where available, the origin city/player/coordinates of that support</li>
+      <li>
+        Troop composition (unit counts) for the city, including support troops
+        and, where available, the origin city/player/coordinates of that support
+      </li>
       <li>The time the data was observed</li>
-      <li>Your account identity (so a report can be attributed to the submitting user) and the script version</li>
+      <li>
+        Your account identity (so a report can be attributed to the submitting
+        user) and the script version
+      </li>
     </ul>
 
-    <p><strong>IP address</strong>: like any web request, your IP address is visible to our server as part of the HTTP connection. We don't store it alongside your account or report data.</p>
+    <p>
+      <strong>IP address</strong>: like any web request, your IP address is
+      visible to our server as part of the HTTP connection. We don't store it
+      alongside your account or report data.
+    </p>
 
-    <p>We do not collect analytics, advertising identifiers, or any data unrelated to the features above, and the script does not use cookies.</p>
+    <p>
+      We do not collect analytics, advertising identifiers, or any data
+      unrelated to the features above, and the script does not use cookies.
+    </p>
+
+    <h2>Custom backend URLs</h2>
+    <p>
+      The script has a setting that lets you point it at a backend other than
+      <code>magiceye.grasstouchers.gg</code>. Everything in this policy
+      describes only the official backend operated by us. The moment you
+      configure a custom URL, everything the script would otherwise send us —
+      account credentials, troop reports, your IP address, etc. — goes to
+      whatever server you pointed it at instead, and none of the commitments in
+      this policy (what's collected, who can see it, retention, deletion on
+      request) apply to that server. We have no visibility into, and no control
+      over, what a custom backend does with your data. That's between you and
+      whoever operates it. Use custom backends at your own risk.
+    </p>
 
     <h2>Why we collect it</h2>
     <p>
       Report data is what the tool exists to produce: a shared index of city
       troop compositions that users and alliance leaders can look up (e.g. to
       check whether a report is stale). Account data lets us gate access to
-      invited users and attribute/rate-limit submissions. IP-based rate
-      limiting protects accounts from automated attacks.
+      invited users and attribute/rate-limit submissions. IP-based rate limiting
+      protects accounts from automated attacks.
     </p>
 
     <h2>Who can see it</h2>
@@ -134,25 +170,25 @@
 
     <h2>Disclosure for legal reasons</h2>
     <p>
-      We may disclose account or report data if we believe in good faith
-      that doing so is necessary to comply with a legal obligation, protect
-      the rights, property, or safety of Grass Touchers, our users, or the
-      public, or investigate suspected abuse of the Service.
+      We may disclose account or report data if we believe in good faith that
+      doing so is necessary to comply with a legal obligation, protect the
+      rights, property, or safety of Grass Touchers, our users, or the public,
+      or investigate suspected abuse of the Service.
     </p>
 
     <h2>Security</h2>
     <p>
       Passwords are hashed with bcrypt and never stored in plaintext, and the
-      reporting API requires a valid signed login token. That said, no
-      online service can guarantee perfect security — use a password for
-      this tool that you don't reuse elsewhere.
+      reporting API requires a valid signed login token. That said, no online
+      service can guarantee perfect security — use a password for this tool that
+      you don't reuse elsewhere.
     </p>
 
     <h2>Data retention</h2>
     <p>
-      Reports and account records are retained indefinitely in our database
-      so the index stays useful over time. If you'd like your account or
-      submitted data deleted, email
+      Reports and account records are retained indefinitely in our database so
+      the index stays useful over time. If you'd like your account or submitted
+      data deleted, email
       <a href="mailto:jakelittle135@gmail.com">jakelittle135@gmail.com</a>
       and we will remove it.
     </p>
@@ -166,9 +202,9 @@
 
     <h2>Changes to this policy</h2>
     <p>
-      If what we collect or how we use it changes, we'll update this
-      document and its "Last updated" date. Continued use of the script
-      after an update means you accept the revised policy.
+      If what we collect or how we use it changes, we'll update this document
+      and its "Last updated" date. Continued use of the script after an update
+      means you accept the revised policy.
     </p>
 
     <h2>Contact</h2>
