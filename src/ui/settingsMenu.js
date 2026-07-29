@@ -24,7 +24,9 @@ import { clearStoredToken } from "../auth.js";
 const BUTTON_ID = "gt-settings-btn";
 const PANEL_ID = "gt-settings-panel";
 const CITY_REPORT_BUTTON_ID = "gt-city-report-btn";
+const AUTH_WARNING_ID = "gt-auth-warning-btn";
 const STALE_INDICATOR_ID = "gt-stale-indicator";
+const TOOLBAR_ID = "gt-toolbar";
 
 const FLAG_LABELS = {
   message: "Display announcement",
@@ -243,6 +245,33 @@ function togglePanel() {
 // not any real coordinated/dynamic layout, so anything we do there risks
 // getting overlapped by a mod that isn't accounting for us either. A fixed
 // corner elsewhere on screen sidesteps that contested area entirely.
+//
+// All the toolbar pieces (settings button, city-report button, auth
+// warning, stale indicator) are flex children of this one fixed-positioned
+// row instead of each being independently position:fixed with a hardcoded
+// left offset — that way an item that's hidden (e.g. the auth warning while
+// logged in) actually collapses its space instead of leaving a permanent
+// gap, and everything after it shifts left to fill in, same as it would
+// shift right when the item reappears.
+function ensureToolbar() {
+  let toolbar = document.getElementById(TOOLBAR_ID);
+  if (toolbar) return toolbar;
+
+  toolbar = document.createElement("div");
+  toolbar.id = TOOLBAR_ID;
+  toolbar.style.cssText = [
+    "position:fixed",
+    "bottom:16px",
+    "left:16px",
+    "z-index:100000",
+    "display:flex",
+    "align-items:center",
+    "gap:8px",
+  ].join(";");
+  document.body.appendChild(toolbar);
+  return toolbar;
+}
+
 export function injectSettingsButton() {
   if (document.getElementById(BUTTON_ID)) return;
 
@@ -250,10 +279,6 @@ export function injectSettingsButton() {
   btn.id = BUTTON_ID;
   btn.title = "GT Magic Eye settings";
   btn.style.cssText = [
-    "position:fixed",
-    "bottom:16px",
-    "left:16px",
-    "z-index:100000",
     "width:36px",
     "height:36px",
     "border-radius:50%",
@@ -263,6 +288,7 @@ export function injectSettingsButton() {
     "align-items:center",
     "justify-content:center",
     "cursor:pointer",
+    "flex-shrink:0",
     "box-shadow:0 1px 4px rgba(0,0,0,0.4)",
   ].join(";");
 
@@ -273,7 +299,7 @@ export function injectSettingsButton() {
   btn.appendChild(icon);
 
   btn.addEventListener("click", togglePanel);
-  document.body.appendChild(btn);
+  ensureToolbar().appendChild(btn);
 }
 
 // Sits to the right of the settings button, same height, same reasoning as
@@ -286,10 +312,6 @@ export function injectCityReportButton(onClick) {
   btn.id = CITY_REPORT_BUTTON_ID;
   btn.title = "Last index";
   btn.style.cssText = [
-    "position:fixed",
-    "bottom:16px",
-    "left:60px",
-    "z-index:100000",
     "width:36px",
     "height:36px",
     "border-radius:50%",
@@ -299,6 +321,7 @@ export function injectCityReportButton(onClick) {
     "align-items:center",
     "justify-content:center",
     "cursor:pointer",
+    "flex-shrink:0",
     "box-shadow:0 1px 4px rgba(0,0,0,0.4)",
   ].join(";");
 
@@ -311,28 +334,88 @@ export function injectCityReportButton(onClick) {
   ].join(" ");
 
   btn.addEventListener("click", onClick);
-  document.body.appendChild(btn);
+  ensureToolbar().appendChild(btn);
 }
 
-// Sits to the right of the city report button, at the same height — since
-// the panel opens upward from the settings button (bottom:60px), that spot
-// stays clear whether or not the panel is open.
+// Sits to the right of the city report button. Injected (and takes up flex
+// space) only while relevant — index.js's refreshAuthWarningIndicator shows
+// it when there's no stored token and removes it once one exists, rather
+// than leaving a permanently-reserved, display:none gap in the toolbar.
+export function injectAuthWarningIndicator(onClick) {
+  if (document.getElementById(AUTH_WARNING_ID)) return;
+
+  const btn = document.createElement("div");
+  btn.id = AUTH_WARNING_ID;
+  btn.title = "Not logged in — click to log in";
+  btn.style.cssText = [
+    "width:36px",
+    "height:36px",
+    "border-radius:50%",
+    `background:${PRIMARY_COLOR}`,
+    `border:1px solid ${WARNING_RED}`,
+    "display:flex",
+    "align-items:center",
+    "justify-content:center",
+    "cursor:pointer",
+    "flex-shrink:0",
+    "box-shadow:0 1px 4px rgba(0,0,0,0.4)",
+  ].join(";");
+
+  const icon = document.createElement("span");
+  icon.textContent = "!";
+  icon.style.cssText = [
+    `color:${WARNING_RED}`,
+    "font:700 18px sans-serif",
+    "line-height:1",
+    "pointer-events:none",
+  ].join(";");
+  btn.appendChild(icon);
+  btn.addEventListener("click", onClick);
+
+  // Inserted right after the city-report button rather than just appended,
+  // since this can be added back in later (e.g. after a login attempt is
+  // abandoned) once the stale indicator already occupies the toolbar's tail
+  // — appending would then land it after the stale indicator instead of
+  // between the two buttons it's meant to sit between.
+  const toolbar = ensureToolbar();
+  const cityReportBtn = document.getElementById(CITY_REPORT_BUTTON_ID);
+  if (cityReportBtn) {
+    cityReportBtn.after(btn);
+  } else {
+    toolbar.appendChild(btn);
+  }
+}
+
+// Adds/removes the element itself (rather than toggling display) so a
+// hidden warning collapses its flex space in the toolbar instead of
+// leaving a gap — see ensureToolbar's comment. onClick is re-bound each
+// time it's recreated, so callers can call this freely without re-injecting
+// by hand.
+export function setAuthWarningVisible(visible, onClick) {
+  const existing = document.getElementById(AUTH_WARNING_ID);
+  if (visible) {
+    if (!existing) injectAuthWarningIndicator(onClick);
+  } else if (existing) {
+    existing.remove();
+  }
+}
+
+// Sits to the right of the auth-warning slot (when present), at the same
+// height — since the panel opens upward from the settings button
+// (bottom:60px), that spot stays clear whether or not the panel is open.
 export function injectStaleIndicator() {
   if (document.getElementById(STALE_INDICATOR_ID)) return;
 
   const el = document.createElement("div");
   el.id = STALE_INDICATOR_ID;
   el.style.cssText = [
-    "position:fixed",
-    "bottom:16px",
-    "left:104px",
-    "z-index:100000",
     "height:36px",
     "display:flex",
     "align-items:center",
     "padding:0 12px",
     "border-radius:18px",
     `background:${PRIMARY_COLOR}`,
+    "flex-shrink:0",
     "border:1px solid", // color set by setStaleIndicatorState below
     "color:#fff",
     "font:12px sans-serif",
@@ -340,7 +423,7 @@ export function injectStaleIndicator() {
     "box-shadow:0 1px 4px rgba(0,0,0,0.4)",
   ].join(";");
 
-  document.body.appendChild(el);
+  ensureToolbar().appendChild(el);
   setStaleIndicatorState(0, 0);
 }
 

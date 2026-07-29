@@ -11,6 +11,7 @@ import { showLoginLink, hideLoginLink } from "./ui/loginPrompt.js";
 import {
   injectSettingsButton,
   injectCityReportButton,
+  setAuthWarningVisible,
   injectStaleIndicator,
   setStaleIndicatorState,
 } from "./ui/settingsMenu.js";
@@ -49,36 +50,64 @@ const API_BASE = getApiBase(); // defaults to the build-time config.cjs value, o
 // while the startup check is still pending login) share one pendingLogin
 // promise instead of each opening their own session/poll loop — only the
 // first shows a login link at all, since showLoginLink is itself a no-op
-// while one is already showing.
+// while one is already showing. pendingLoginUrl is kept alongside it so the
+// auth-warning indicator's click handler (promptLogin, below) can re-show
+// the same modal if the user closed it without finishing.
 let pendingLogin = null;
+let pendingLoginUrl = null;
+
+function refreshAuthWarningIndicator() {
+  setAuthWarningVisible(!getStoredToken(), promptLogin);
+}
+
+// Only pops the modal open when a *new* login attempt starts — concurrent
+// internal 401s reuse the poll already in flight without reopening a modal
+// the user may have deliberately closed. Reopening on demand is what
+// promptLogin (the indicator's click handler) is for instead.
+function ensureLoginInFlight() {
+  if (!pendingLogin) {
+    logger.warn("auth required, showing login link");
+    const sessionId = generateSessionId();
+    pendingLoginUrl = `${API_BASE}/login?session=${encodeURIComponent(sessionId)}`;
+    showLoginLink(pendingLoginUrl);
+
+    pendingLogin = pollForToken(API_BASE, sessionId)
+      .then((polledToken) => {
+        setStoredToken(polledToken);
+        return polledToken;
+      })
+      .catch((err) => {
+        logger.error("login failed or timed out", err);
+        return null;
+      })
+      .finally(() => {
+        hideLoginLink();
+        pendingLogin = null;
+        pendingLoginUrl = null;
+        refreshAuthWarningIndicator();
+      });
+  }
+
+  return pendingLogin;
+}
+
+// Click handler for the auth-warning indicator (only ever visible while
+// unauthenticated): re-shows the modal for whatever login attempt is
+// already running, or starts a fresh one if none is.
+function promptLogin() {
+  if (pendingLoginUrl) {
+    showLoginLink(pendingLoginUrl);
+  } else {
+    ensureLoginInFlight();
+  }
+}
 
 async function authenticatedFetch(makeRequest) {
   let token = getStoredToken();
   let res = await makeRequest(token);
 
   if (res.status === 401) {
-    if (!pendingLogin) {
-      logger.warn("auth required, showing login link");
-      const sessionId = generateSessionId();
-      const loginUrl = `${API_BASE}/login?session=${encodeURIComponent(sessionId)}`;
-      showLoginLink(loginUrl);
-
-      pendingLogin = pollForToken(API_BASE, sessionId)
-        .then((polledToken) => {
-          setStoredToken(polledToken);
-          return polledToken;
-        })
-        .catch((err) => {
-          logger.error("login failed or timed out", err);
-          return null;
-        })
-        .finally(() => {
-          hideLoginLink();
-          pendingLogin = null;
-        });
-    }
-
-    token = await pendingLogin;
+    token = await ensureLoginInFlight();
     if (!token) return null;
 
     res = await makeRequest(token);
@@ -413,6 +442,11 @@ function openCityReportWindow() {
 }
 
 injectCityReportButton(openCityReportWindow);
+
+// Reflects whatever the current auth state already is at load (e.g. a
+// previous session's token expired/was cleared) — doesn't wait for a
+// request to 401 first.
+refreshAuthWarningIndicator();
 
 // Keeps an already-open report window showing the city currently being
 // viewed, not whichever one was open when it was first launched. A no-op
