@@ -24,8 +24,9 @@ function shellSource({ name, namespace, baseUrl, updateUrl }) {
 ${updateLines}// @supportURL   mailto:jakelittle135@gmail.com
 // @copyright    2026, Grass Touchers
 // @grant        none
-// Privacy policy: ${baseUrl}/privacy
 // ==/UserScript==
+
+// Privacy policy: ${baseUrl}/privacy
 
 (function () {
   var BASE_URL = ${JSON.stringify(baseUrl)};

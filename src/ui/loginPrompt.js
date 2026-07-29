@@ -1,5 +1,6 @@
 import { SECONDARY_COLOR, PRIMARY_COLOR } from "./theme.js";
 import logoVertical from "../../assets/logo-vertical.png";
+import { isUsingCustomBackend, getApiBase } from "../backendConfig.js";
 
 const OVERLAY_ID = "gt-login-overlay";
 
@@ -44,11 +45,11 @@ export function showLoginLink(url) {
   ].join(";");
   closeBtn.addEventListener("click", hideLoginLink);
 
-  const logo = document.createElement("img");
-  logo.alt = "Grass Touchers";
-  logo.src = logoVertical;
-  logo.style.cssText =
-    "display:block;width:110px;height:auto;margin:0 auto 14px;";
+  // Branding (the GT logo, "GT Magic Eye" wording) implies this is the
+  // official backend — misleading if the user's actually pointed at some
+  // other server, so a custom backend gets a generic, unbranded prompt
+  // instead, naming the backend it's actually logging into.
+  const customBackend = isUsingCustomBackend();
 
   const message = document.createElement("div");
   message.textContent = "Authentication required.";
@@ -57,7 +58,9 @@ export function showLoginLink(url) {
   const link = document.createElement("a");
   link.href = url;
   link.target = "_blank";
-  link.textContent = "Log in to GT Magic Eye";
+  link.textContent = customBackend
+    ? `Log in to ${getApiBase()}`
+    : "Log in to GT Magic Eye";
   link.style.cssText = [
     "display:inline-block",
     "padding:8px 16px",
@@ -70,7 +73,16 @@ export function showLoginLink(url) {
   ].join(";");
 
   box.appendChild(closeBtn);
-  box.appendChild(logo);
+
+  if (!customBackend) {
+    const logo = document.createElement("img");
+    logo.alt = "Grass Touchers";
+    logo.src = logoVertical;
+    logo.style.cssText =
+      "display:block;width:110px;height:auto;margin:0 auto 14px;";
+    box.appendChild(logo);
+  }
+
   box.appendChild(message);
   box.appendChild(link);
   overlay.appendChild(box);

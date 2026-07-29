@@ -1,5 +1,6 @@
 import { SECONDARY_COLOR, PRIMARY_COLOR, WARNING_YELLOW, WARNING_RED } from "./theme.js";
 import logoIcon from "../../assets/logo-icon.png";
+import { FEATURE_FLAGS } from "../featureFlags.js";
 
 const UNIT_BOX_SELECTOR = ".nui_units_box";
 const DEFENSE_HEADER_SELECTOR = "#defense_header";
@@ -534,11 +535,18 @@ function buildTownIndicator() {
     "vertical-align:middle",
   ].join(";");
 
+  // wrap keeps its explicit 15x15 box regardless, so hiding the icon still
+  // leaves the dot (absolutely positioned against wrap, not the icon) in
+  // its usual spot next to the city title.
   const icon = document.createElement("img");
   icon.src = logoIcon;
   icon.alt = "GT Magic Eye";
-  icon.style.cssText =
-    "display:block;width:14px;height:14px;pointer-events:none;";
+  icon.style.cssText = [
+    `display:${FEATURE_FLAGS.showTownIcon ? "block" : "none"}`,
+    "width:14px",
+    "height:14px",
+    "pointer-events:none",
+  ].join(";");
   wrap.appendChild(icon);
 
   const dot = buildStaleDotElement(["position:absolute", "top:-2px", "right:-2px", "display:none"]);

@@ -16,6 +16,14 @@ export function setStoredToken(token) {
   }
 }
 
+export function clearStoredToken() {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // ignore storage failures (e.g. private browsing)
+  }
+}
+
 export function generateSessionId() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
   return `sess-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
