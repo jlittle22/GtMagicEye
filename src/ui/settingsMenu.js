@@ -3,9 +3,18 @@ import {
   SECONDARY_COLOR,
   WARNING_YELLOW,
   WARNING_RED,
+  DANGER_TEXT_COLOR,
 } from "./theme.js";
 import logoIcon from "../../assets/logo-icon.png";
 import { FEATURE_FLAGS, setFeatureFlag } from "../featureFlags.js";
+import { getStoredToken } from "../auth.js";
+import { decodeJwtPayload } from "../jwt.js";
+import {
+  grantConsent,
+  revokeConsent,
+  setDeclinedConsentThisSession,
+} from "../consentApi.js";
+import { showRevokeConsentWarning } from "./consentPrompt.js";
 
 const BUTTON_ID = "gt-settings-btn";
 const PANEL_ID = "gt-settings-panel";
@@ -92,6 +101,98 @@ function buildPanel() {
   note.style.cssText = "font-size:11px;color:#aaa;margin-top:4px;";
   panel.appendChild(note);
 
+  const dangerZoneTitle = document.createElement("div");
+  dangerZoneTitle.textContent = "Danger zone";
+  dangerZoneTitle.style.cssText = [
+    "margin-top:12px",
+    "text-align:left",
+    "font-weight:600",
+    `color:${DANGER_TEXT_COLOR}`,
+  ].join(";");
+  panel.appendChild(dangerZoneTitle);
+
+  const dangerZoneSubtitle = document.createElement("div");
+  dangerZoneSubtitle.textContent =
+    "These settings can break the application. Only proceed if you know what you're doing.";
+  dangerZoneSubtitle.style.cssText = [
+    "font-size:11px",
+    "color:#aaa",
+    "margin-top:10px",
+    "padding-top:10px",
+    `border-top:1px solid ${DANGER_TEXT_COLOR}`,
+    "margin-bottom:10px",
+  ].join(";");
+  panel.appendChild(dangerZoneSubtitle);
+
+  const consentToken = getStoredToken();
+  const consented = !!decodeJwtPayload(consentToken)?.consentedAt;
+
+  const consentRow = document.createElement("label");
+  consentRow.style.cssText = [
+    "display:flex",
+    "align-items:center",
+    "gap:8px",
+    "margin-bottom:4px",
+    consentToken ? "cursor:pointer" : "cursor:not-allowed",
+  ].join(";");
+  if (!consentToken) consentRow.title = "Log in first to manage consent";
+
+  const consentCheckbox = document.createElement("input");
+  consentCheckbox.type = "checkbox";
+  consentCheckbox.checked = consented;
+  consentCheckbox.disabled = !consentToken;
+
+  const consentLabel = document.createElement("span");
+  consentLabel.textContent = "Consent to privacy policy";
+
+  consentRow.appendChild(consentCheckbox);
+  consentRow.appendChild(consentLabel);
+  panel.appendChild(consentRow);
+
+  consentCheckbox.addEventListener("change", async () => {
+    const token = getStoredToken();
+    if (!token) {
+      consentCheckbox.checked = false;
+      return;
+    }
+
+    if (consentCheckbox.checked) {
+      // Granting: the checkbox itself is the explicit opt-in action, no
+      // extra confirmation needed.
+      consentCheckbox.disabled = true;
+      const newToken = await grantConsent(token);
+      consentCheckbox.disabled = false;
+      if (!newToken) {
+        consentCheckbox.checked = false;
+        return;
+      }
+      // Granting consent here is also how a session-scoped decline (see
+      // ensureConsentInFlight/authenticatedFetch in index.js) gets undone
+      // without waiting for a new session.
+      setDeclinedConsentThisSession(false);
+      window.location.reload();
+      return;
+    }
+
+    // Unchecking withdraws consent, which breaks the tool's core
+    // functionality — confirm first, and put the box back if they back out.
+    consentCheckbox.disabled = true;
+    const confirmed = await showRevokeConsentWarning();
+    if (!confirmed) {
+      consentCheckbox.checked = true;
+      consentCheckbox.disabled = false;
+      return;
+    }
+
+    const newToken = await revokeConsent(token);
+    consentCheckbox.disabled = false;
+    if (!newToken) {
+      consentCheckbox.checked = true;
+      return;
+    }
+    window.location.reload();
+  });
+
   const privacyLink = document.createElement("a");
   privacyLink.textContent = "Privacy policy";
   privacyLink.href = `${__API_BASE__}/privacy`;
@@ -117,6 +218,16 @@ function togglePanel() {
     return;
   }
   document.body.appendChild(buildPanel());
+}
+
+// Opens (never closes) the panel — used as the click handler for the
+// toolbar warning indicator when it's showing for a declined-consent reason,
+// so clicking it takes the user straight to the "Consent to privacy policy"
+// checkbox rather than toggling a panel they may not already have open.
+export function openSettingsPanel() {
+  if (!document.getElementById(PANEL_ID)) {
+    document.body.appendChild(buildPanel());
+  }
 }
 
 // Deliberately not hooking into .gods_area — other mods (GrepoData, "Dio")
@@ -218,14 +329,19 @@ export function injectCityReportButton(onClick) {
 
 // Sits to the right of the city report button. Injected (and takes up flex
 // space) only while relevant — index.js's refreshAuthWarningIndicator shows
-// it when there's no stored token and removes it once one exists, rather
-// than leaving a permanently-reserved, display:none gap in the toolbar.
-export function injectAuthWarningIndicator(onClick) {
+// it when there's no stored token (or consent was declined this session)
+// and removes it once that's resolved, rather than leaving a permanently-
+// reserved, display:none gap in the toolbar. The same "!" marker is reused
+// for both reasons — title/onClick are what tell them apart.
+export function injectAuthWarningIndicator(
+  onClick,
+  title = "Not logged in — click to log in",
+) {
   if (document.getElementById(AUTH_WARNING_ID)) return;
 
   const btn = document.createElement("div");
   btn.id = AUTH_WARNING_ID;
-  btn.title = "Not logged in — click to log in";
+  btn.title = title;
   btn.style.cssText = [
     "width:36px",
     "height:36px",
@@ -267,13 +383,16 @@ export function injectAuthWarningIndicator(onClick) {
 
 // Adds/removes the element itself (rather than toggling display) so a
 // hidden warning collapses its flex space in the toolbar instead of
-// leaving a gap — see ensureToolbar's comment. onClick is re-bound each
-// time it's recreated, so callers can call this freely without re-injecting
-// by hand.
-export function setAuthWarningVisible(visible, onClick) {
+// leaving a gap — see ensureToolbar's comment. onClick/title are only
+// applied when (re-)injecting: if the indicator is already showing for one
+// reason, a call for a different reason is a no-op until the first one
+// clears it (visible=false) — the two reasons are mutually exclusive in
+// practice (consent can't be declined without a token to have logged in
+// with), so this hasn't needed to change mid-display.
+export function setAuthWarningVisible(visible, onClick, title) {
   const existing = document.getElementById(AUTH_WARNING_ID);
   if (visible) {
-    if (!existing) injectAuthWarningIndicator(onClick);
+    if (!existing) injectAuthWarningIndicator(onClick, title);
   } else if (existing) {
     existing.remove();
   }

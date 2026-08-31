@@ -5,6 +5,28 @@ import { UserDocument } from './database/userDocument.js';
 
 const SALT_ROUNDS = 10;
 
+// Explicit allowlist (not a spread-minus-passwordHash): keeps any future
+// sensitive field off the JWT by default, and covers documents created
+// before a field like `approvedAt` existed, which won't have it stored at
+// all (schema defaults only apply on insert, not retroactively).
+//
+// Shared by loginUser and the /api/consent routes — anywhere a claim baked
+// into the token (namely consentedAt) changes, the fix is to mint a fresh
+// token reflecting the new state rather than leave the client holding one
+// with a stale claim.
+export function signUserToken(user) {
+  const safeUser = {
+    _id: user._id,
+    username: user.username,
+    approvedAt: user.approvedAt ?? null,
+    createdAt: user.createdAt,
+    consentedAt: user.consentedAt ?? null,
+  };
+
+  // TODO: revisit claims + expiry once auth requirements are finalized.
+  return jwt.sign(safeUser, process.env.JWT_SECRET, { expiresIn: '7d' });
+}
+
 export async function registerUser(username, password) {
   const users = getDb().collection('users');
 
@@ -41,17 +63,5 @@ export async function loginUser(username, password) {
 
   await users.updateOne({ _id: user._id }, { $set: { lastLoggedInAt: new Date() } });
 
-  // Explicit allowlist (not a spread-minus-passwordHash): keeps any future
-  // sensitive field off the JWT by default, and covers documents created
-  // before a field like `approvedAt` existed, which won't have it stored at
-  // all (schema defaults only apply on insert, not retroactively).
-  const safeUser = {
-    _id: user._id,
-    username: user.username,
-    approvedAt: user.approvedAt ?? null,
-    createdAt: user.createdAt,
-  };
-
-  // TODO: revisit claims + expiry once auth requirements are finalized.
-  return jwt.sign(safeUser, process.env.JWT_SECRET, { expiresIn: '7d' });
+  return signUserToken(user);
 }

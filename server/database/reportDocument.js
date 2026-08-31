@@ -10,6 +10,7 @@ export const ReportSubmitterDocument = z.object({
   username: z.string(),
   approvedAt: z.coerce.date().nullable(),
   createdAt: z.coerce.date(),
+  consentedAt: z.coerce.date().nullable(),
 });
 
 // Shape of a document in the `reports` collection. Each document is one

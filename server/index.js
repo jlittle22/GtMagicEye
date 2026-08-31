@@ -8,8 +8,8 @@ import { ObjectId } from "mongodb";
 import { ReportPayload } from "../shared/payload.js";
 import { reportContentSignature } from "../shared/reportDedup.js";
 import { connectDb, getDb } from "./db.js";
-import { loginUser } from "./auth.js";
-import { requireAuth } from "./middleware/requireAuth.js";
+import { loginUser, signUserToken } from "./auth.js";
+import { requireAuth, requireAuthIgnoreConsent } from "./middleware/requireAuth.js";
 import { storeSessionToken, consumeSessionToken } from "./loginSessions.js";
 import { ReportDocument } from "./database/reportDocument.js";
 import { CityStateDocument } from "./database/cityStateDocument.js";
@@ -88,6 +88,61 @@ app.get("/api/auth/session/:sessionId", (req, res) => {
     return res.status(404).json({ error: "not ready" });
   }
   res.status(200).json({ token });
+});
+
+// Grants consent. A no-op (returns the existing timestamp rather than
+// overwriting it) if the account has already consented, so retrying/
+// re-posting doesn't churn the timestamp. Either way, reissues a token: the
+// caller's current token was minted before this consentedAt value was set
+// (or before whatever earlier consent this is a no-op for), so its baked-in
+// consentedAt claim is stale — a fresh token keeps that claim (and the
+// submittedBy/lastReportedBy snapshots future reports embed it into)
+// truthful without requiring a re-login. This doesn't invalidate the old
+// token (this server has no denylist for that), but the old one still works
+// fine for auth purposes regardless, since requireAuth re-checks consent
+// against the DB on every request rather than trusting the token's claim.
+app.post("/api/consent", requireAuthIgnoreConsent, async (req, res) => {
+  if (req.consentedAt) {
+    return res.status(200).json({
+      consentedAt: req.consentedAt,
+      token: signUserToken({ ...req.user, consentedAt: req.consentedAt }),
+    });
+  }
+
+  const consentedAt = new Date();
+  try {
+    await getDb()
+      .collection("users")
+      .updateOne({ _id: new ObjectId(req.user._id) }, { $set: { consentedAt } });
+  } catch (err) {
+    return res.status(500).json({ error: "failed to record consent" });
+  }
+
+  res.status(200).json({
+    consentedAt,
+    token: signUserToken({ ...req.user, consentedAt }),
+  });
+});
+
+// Withdraws consent, reverting it back to null, and reissues a token for the
+// same staleness reason as POST above. Note this does not revoke the
+// caller's previous token either — but again, that doesn't leave a gap:
+// every authenticated route re-checks consentedAt against the DB on each
+// request (see requireAuth), so the very next request made with any token
+// for this account is rejected with 428 regardless of what it claims.
+app.delete("/api/consent", requireAuthIgnoreConsent, async (req, res) => {
+  try {
+    await getDb()
+      .collection("users")
+      .updateOne({ _id: new ObjectId(req.user._id) }, { $set: { consentedAt: null } });
+  } catch (err) {
+    return res.status(500).json({ error: "failed to withdraw consent" });
+  }
+
+  res.status(200).json({
+    consentedAt: null,
+    token: signUserToken({ ...req.user, consentedAt: null }),
+  });
 });
 
 // Same city, same troop/support content, reported again within this

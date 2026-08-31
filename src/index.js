@@ -8,12 +8,19 @@ import {
   pollForToken,
 } from "./auth.js";
 import { showLoginLink, hideLoginLink } from "./ui/loginPrompt.js";
+import { showConsentPrompt } from "./ui/consentPrompt.js";
+import { decodeJwtPayload } from "./jwt.js";
+import {
+  hasDeclinedConsentThisSession,
+  setDeclinedConsentThisSession,
+} from "./consentApi.js";
 import {
   injectSettingsButton,
   injectCityReportButton,
   setAuthWarningVisible,
   injectStaleIndicator,
   setStaleIndicatorState,
+  openSettingsPanel,
 } from "./ui/settingsMenu.js";
 import {
   showCityReportWindow,
@@ -56,7 +63,21 @@ const API_BASE = __API_BASE__;
 let pendingLogin = null;
 let pendingLoginUrl = null;
 
+// Reuses the same "!" toolbar marker for two different blocking reasons —
+// not logged in, or consent declined this session — since only one can ever
+// apply at a time (declining consent requires a token to have logged in
+// with in the first place). Declined-consent takes the click straight to
+// the settings panel's checkbox rather than the login flow.
 function refreshAuthWarningIndicator() {
+  if (hasDeclinedConsentThisSession()) {
+    setAuthWarningVisible(
+      true,
+      openSettingsPanel,
+      "Data collection declined this session — click to reconsider",
+    );
+    return;
+  }
+
   setAuthWarningVisible(!getStoredToken(), promptLogin);
 }
 
@@ -102,12 +123,120 @@ function promptLogin() {
   }
 }
 
+// Concurrent callers (e.g. the town indicator re-checking on a city switch
+// while the startup check is still pending) share one in-flight prompt
+// rather than each popping their own — same reasoning as pendingLogin above.
+let pendingConsent = null;
+
+// Prompts, and on acceptance POSTs the acceptance to the server (which
+// itself carries no game data — just the Authorization header) and stores
+// the freshly reissued token the server hands back. Falls back to a real
+// re-login if the POST 401s, which covers a token minted before consentedAt
+// existed on the JWT and so fails the server's stricter shape check.
+async function requestConsent(token) {
+  const accepted = await showConsentPrompt();
+  if (!accepted) {
+    logger.warn("consent declined, not sending data for the rest of this session");
+    setDeclinedConsentThisSession(true);
+    refreshAuthWarningIndicator();
+    return null;
+  }
+
+  const postConsent = (t) =>
+    fetch(`${API_BASE}/api/consent`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${t}` },
+    });
+
+  try {
+    let res = await postConsent(token);
+
+    if (res.status === 401) {
+      token = await ensureLoginInFlight();
+      if (!token) return null;
+      res = await postConsent(token);
+    }
+
+    if (!res.ok) {
+      logger.error("failed to record consent", res.status);
+      return null;
+    }
+
+    const data = await res.json();
+    setStoredToken(data.token);
+    setDeclinedConsentThisSession(false);
+    return data.token;
+  } catch (err) {
+    logger.error("failed to record consent", err);
+    return null;
+  }
+}
+
+// Gate every request that would carry game data behind explicit, in-script
+// opt-in — nothing (troop counts, support details, player/city/alliance
+// IDs, coordinates) is sent until this resolves with a token. Trusts the
+// token's own consentedAt claim to skip re-prompting on every call (that's
+// just a UX shortcut — the server re-checks the real DB value on every
+// request regardless), except when forcePrompt is set: that's used after
+// the server itself returns 428, meaning consent was withdrawn out from
+// under this token (e.g. from another session) and the claim can't be
+// trusted anymore.
+function ensureConsentInFlight(token, { forcePrompt = false } = {}) {
+  if (!forcePrompt && decodeJwtPayload(token)?.consentedAt) {
+    return Promise.resolve(token);
+  }
+
+  if (!pendingConsent) {
+    pendingConsent = requestConsent(token).finally(() => {
+      pendingConsent = null;
+    });
+  }
+
+  return pendingConsent;
+}
+
+// A token minted before consentedAt existed on the JWT has no such key at
+// all (not even null) — decoding it can't tell "not consented" apart from
+// "this token predates the claim entirely" the way ensureConsentInFlight's
+// truthy check does. Catching that distinction here, before ever showing
+// the consent prompt, is what keeps the two steps in a sane order: force a
+// real re-login first (the server would reject this token's shape anyway,
+// regardless of whether it's otherwise still valid), then ask for consent.
+// Without this, a stale-shape token shows the consent prompt first, and
+// only 401s (forcing a surprise second login) once its acceptance is
+// posted to the server.
+function hasCurrentTokenShape(token) {
+  const payload = decodeJwtPayload(token);
+  return !!payload && "consentedAt" in payload;
+}
+
 async function authenticatedFetch(makeRequest) {
+  // A decline is scoped to this session (see setDeclinedConsentThisSession)
+  // and means the script is fully disabled until a new one starts — no
+  // requests at all, not even a login check, rather than re-prompting.
+  if (hasDeclinedConsentThisSession()) return null;
+
   let token = getStoredToken();
+  if (!token || !hasCurrentTokenShape(token)) {
+    token = await ensureLoginInFlight();
+    if (!token) return null;
+  }
+
+  token = await ensureConsentInFlight(token);
+  if (!token) return null;
+
   let res = await makeRequest(token);
 
   if (res.status === 401) {
     token = await ensureLoginInFlight();
+    if (!token) return null;
+
+    token = await ensureConsentInFlight(token);
+    if (!token) return null;
+
+    res = await makeRequest(token);
+  } else if (res.status === 428) {
+    token = await ensureConsentInFlight(token, { forcePrompt: true });
     if (!token) return null;
 
     res = await makeRequest(token);
