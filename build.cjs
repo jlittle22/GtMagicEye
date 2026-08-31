@@ -5,7 +5,16 @@ const config = require("./config.cjs");
 const watch = process.argv.includes("--watch");
 const serve = process.argv.includes("--serve");
 const isDev = watch || serve || process.argv.includes("--dev");
-const apiBase = isDev ? config.devApiBase : config.prodApiBase;
+// Set via `--set-build-env-vars=DEPLOY_TARGET=staging` on the staging Cloud Run
+// deploy (see package.json's deploy:staging) so the buildpack's `gcp-build` step
+// bakes in the staging API base instead of prod's, without needing a CLI flag.
+const isStaging = !isDev && process.env.DEPLOY_TARGET === "staging";
+const apiBase = isDev
+  ? config.devApiBase
+  : isStaging
+    ? config.stagingApiBase
+    : config.prodApiBase;
+const target = isDev ? "dev" : isStaging ? "staging" : "prod";
 
 // Opt-in: obscures the payload actually served to the client
 // (dist/grass-touchers.js) so casually copying and repurposing it takes
@@ -59,7 +68,7 @@ async function build() {
     },
   });
 
-  console.log(`Building for ${isDev ? "dev" : "prod"} (API_BASE=${apiBase})`);
+  console.log(`Building for ${target} (API_BASE=${apiBase})`);
 
   if (serve) {
     if (obfuscate)

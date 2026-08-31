@@ -65,12 +65,28 @@ fs.writeFileSync(
   }),
 );
 
+fs.writeFileSync(
+  path.join(outDir, "grass-touchers.staging.user.js"),
+  shellSource({
+    name: "GT Magic Eye (Staging)",
+    namespace: "grasstouchers-staging",
+    baseUrl: config.stagingBaseUrl,
+    // No updateUrl: this shell is for manually testing against staging, not
+    // something end users should auto-update into.
+    updateUrl: null,
+  }),
+);
+
 console.log("Shell scripts written:");
 console.log(
-  "  dist/grass-touchers.user.js      (prod ->",
+  "  dist/grass-touchers.user.js          (prod    ->",
   config.prodBaseUrl + ")",
 );
 console.log(
-  "  dist/grass-touchers.dev.user.js  (dev  ->",
+  "  dist/grass-touchers.dev.user.js      (dev     ->",
   config.devBaseUrl + ")",
+);
+console.log(
+  "  dist/grass-touchers.staging.user.js  (staging ->",
+  config.stagingBaseUrl + ")",
 );

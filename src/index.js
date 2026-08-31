@@ -20,7 +20,6 @@ import {
   refreshCityReportWindowIfOpen,
 } from "./ui/cityReportWindow.js";
 import { FEATURE_FLAGS } from "./featureFlags.js";
-import { getApiBase } from "./backendConfig.js";
 import {
   watchDefenseHeader,
   readCurrentCityTroops,
@@ -38,7 +37,8 @@ import {
 
 const logger = new Logger("main");
 
-const API_BASE = getApiBase(); // defaults to the build-time config.cjs value, overridable in settings
+// __API_BASE__ is injected at build time from config.cjs (see build.cjs).
+const API_BASE = __API_BASE__;
 
 // Shared by every authenticated request: attaches the stored token, and on
 // a 401 shows the login modal, polls until the popup reports a token, then

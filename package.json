@@ -20,7 +20,8 @@
     "create-user": "node scripts/createUser.js",
     "start": "node server/index.js",
     "gcp-build": "node build.cjs && node build-shell.cjs && npm run build --workspace=webapp",
-    "deploy": "gcloud run deploy grass-touchers --source . --project=grass-touchers-b9882344 --region=us-west1 --allow-unauthenticated --set-env-vars=MONGODB_DB=grass_touchers --set-secrets=MONGODB_URI=MONGODB_URI:latest,JWT_SECRET=JWT_SECRET:latest"
+    "deploy": "gcloud run deploy grass-touchers --source . --project=grass-touchers-b9882344 --region=us-west1 --allow-unauthenticated --set-env-vars=MONGODB_DB=grass_touchers --set-secrets=MONGODB_URI=MONGODB_URI:latest,JWT_SECRET=JWT_SECRET:latest",
+    "deploy:staging": "gcloud run deploy grass-touchers-staging --source . --project=grass-touchers-b9882344 --region=us-west1 --allow-unauthenticated --set-build-env-vars=DEPLOY_TARGET=staging --set-env-vars=MONGODB_DB=grass_touchers_staging --set-secrets=MONGODB_URI=MONGODB_URI_STAGING:latest,JWT_SECRET=JWT_SECRET_STAGING:latest"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

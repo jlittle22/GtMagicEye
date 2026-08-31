@@ -19,12 +19,17 @@ module.exports = {
   // static payload and the API from the same host. No trailing slash.
   prodBaseUrl: "https://magiceye.grasstouchers.gg",
   devBaseUrl: `http://${devHost}:8000`,
+  // Staging Cloud Run service (grass-touchers-staging, same project/region as
+  // prod) — no custom domain mapped yet, so this is the run.app URL directly.
+  stagingBaseUrl: "https://grass-touchers-staging-543290570164.us-west1.run.app",
 
   // Where the payload POSTs report data. Separate from the URLs above because in dev
   // the payload is served statically (esbuild --serve on :8000) while the API server
-  // (npm run server) listens on a different port. In prod both are the same host.
+  // (npm run server) listens on a different port. In prod (and staging) both are the
+  // same host.
   prodApiBase: "https://magiceye.grasstouchers.gg",
   devApiBase: `http://${devHost}:8080`,
+  stagingApiBase: "https://grass-touchers-staging-543290570164.us-west1.run.app",
 
   // Days since a city's last report before the town indicator flags it as
   // needing re-indexing (the red dot). Same for dev and prod.
