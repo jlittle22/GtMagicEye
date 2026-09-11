@@ -77,8 +77,17 @@
     <a class="privacy-link" href="/privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a>
 
     <script>
+      // Two ways this page gets opened: as the userscript's login popup
+      // (session param, relays the token back through the server and closes
+      // the tab) or as a direct browser visit from the webapp's auth gate
+      // (redirect param, stores the token the same way the webapp's own
+      // login form does — see webapp/lib/auth.ts's TOKEN_STORAGE_KEY — and
+      // navigates back into the app).
+      var WEBAPP_TOKEN_STORAGE_KEY = "gt_webapp_auth_token";
+
       var params = new URLSearchParams(location.search);
       var sessionId = params.get("session");
+      var redirectTo = params.get("redirect");
 
       var form = document.getElementById("login-form");
       var errorEl = document.getElementById("error");
@@ -109,21 +118,30 @@
             return res.json();
           })
           .then(function (data) {
-            var finish = function () {
+            var finishPopup = function () {
               errorEl.style.color = "#8bc948";
               errorEl.textContent = "Logged in. You can close this tab.";
               window.close();
             };
 
-            if (!sessionId) return finish();
+            if (sessionId) {
+              fetch("/api/auth/session/" + encodeURIComponent(sessionId), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token: data.token }),
+              })
+                .then(finishPopup)
+                .catch(finishPopup);
+              return;
+            }
 
-            fetch("/api/auth/session/" + encodeURIComponent(sessionId), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token: data.token }),
-            })
-              .then(finish)
-              .catch(finish);
+            try {
+              localStorage.setItem(WEBAPP_TOKEN_STORAGE_KEY, data.token);
+            } catch (err) {
+              // ignore storage failures (e.g. private browsing)
+            }
+
+            window.location.href = redirectTo || "/overview";
           })
           .catch(function (err) {
             errorEl.textContent = err.message || "Login failed";
