@@ -43,8 +43,8 @@ app.use(express.json({ limit: "1mb" }));
 // container is finalized.
 app.use(express.static(path.join(__dirname, "..", "dist")));
 
-// Static assets (install page, logo) — served by name (install.html, not
-// index.html), so this doesn't auto-claim "/"; that's the Next.js app's now.
+// Static assets (install page, logo, and the "/" landing page — served as
+// index.html, express.static's default for a directory-index request).
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/install", (req, res) => {
@@ -356,7 +356,8 @@ app.get("/api/reports/cityState", requireAuth, async (req, res) => {
 // a separate service — magiceye.grasstouchers.gg needs to stay the one
 // domain, and the two don't need runtime isolation from each other. Its
 // pages (/overview, /scenarios, ...) own everything not already claimed by a
-// route or static file above, including "/" itself.
+// route or static file above. "/" itself is claimed by public/index.html
+// above, not by this app — the webapp has no root page of its own.
 const nextApp = next({
   dev: process.env.NODE_ENV !== "production",
   dir: path.join(__dirname, "..", "webapp"),
